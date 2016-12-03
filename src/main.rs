@@ -6,6 +6,7 @@ use std::clone::Clone;
 use std::str::Lines;
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::fmt;
 
 // Device Tree stucture
 /*
@@ -98,21 +99,33 @@ impl<'a> ParsedFile<'a> {
 			Err(format!("Did not find file: {:?}", path))
 		}
 	}
-}
-/*
-impl<'a> fmt::Display for ParsedFile<'a> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{:?}: {}", self.file, self.method)
-		//Name: method
-		//|- Next one
+
+	fn write(&self, f: &mut fmt::Formatter, prefix: &str) -> fmt::Result {
+		let mut next_prefix = prefix.to_string();
+		next_prefix.push_str(" |-");
+		writeln!(f, "{} {:?}: {}", prefix, self.path, self.method)
+			.and(self.included_files.iter().fold(Ok(()), |res, x| res.and(x.write(f, &next_prefix))))
 	}
 }
-*/
+
+impl<'a> fmt::Display for ParsedFile<'a> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.write(f, "")
+	}
+}
+
+impl fmt::Display for IncludeMethod {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			IncludeMethod::DTS => write!(f, "DTS"),
+			IncludeMethod::CPP(_, _) => write!(f, "CPP"),
+		}
+	}
+}
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
 fn main() {
-	// let file_name = "am335x-boneblack.dts";
 	let file_name = match env::args().nth(1) {
 		None => {
 			println!("You forgot the dts file, you dummy");
@@ -172,6 +185,8 @@ fn main() {
 			root_file.assign_mapping(path, mapping).unwrap();
 		}
 	}
+
+	println!("{}", root_file);
 }
 
 fn count_begining_chars(s: &str, c: char) -> usize {
