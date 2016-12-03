@@ -1,6 +1,6 @@
 use std::env;
 use std::process::Command;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::clone::Clone;
 use std::str::Lines;
@@ -43,13 +43,22 @@ struct ParsedFile<'a> {
 #[derive(Debug)]
 enum IncludeMethod<'a> {
 	DTS,
-	CPP(&'a File, Vec<(FileSlice, FileSlice)>),
+	CPP(&'a File, Vec<FileMapping>),
 }
 
 #[derive(Debug)]
-struct FileSlice {
-	start: usize,
+struct FileMapping {
+	parent_start: usize,
+	child_start: usize,
 	len: usize,
+}
+
+#[derive(Debug)]
+enum LinemarkerFlag {
+	Start,
+	Return,
+	System,
+	Extern,
 }
 
 // Change tracking
@@ -72,11 +81,6 @@ impl<'a> ParsedFile<'a> {
 			included_files: vec![],
 		}
 	}
-/*
-	fn print(&self, depth: usize) -> String {
-
-	}
-*/
 }
 /*
 impl<'a> fmt::Display for ParsedFile<'a> {
@@ -88,64 +92,71 @@ impl<'a> fmt::Display for ParsedFile<'a> {
 }
 */
 
+const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
+
 fn main() {
 	// let file_name = "am335x-boneblack.dts";
 	let file_name = match env::args().nth(1) {
 		None => {
 			println!("You forgot the dts file, you dummy");
 			return;
-		},
+		}
 		Some(x) => x,
 	};
 
-	// arm-linux-gnueabi-gcc -H -E -nostdinc -Iarch/arm/boot/dts -Iarch/arm/boot/dts/include -undef -D__DTS__ -x assembler-with-cpp -o /dev/null arch/arm/boot/dts/versatile-ab.dts
 	let arch = "arm";
 	let dts_folder = format!("arch/{}/boot/dts/", arch);
 	let file_path = format!("{}{}", dts_folder, file_name);
 
 	let include_output = Command::new("arm-linux-gnueabi-gcc")
-								.args(&["-H", "-E", "-nostdinc"])
-								.arg(format!("-I{}", dts_folder))
-								.arg(format!("-I{}include/", dts_folder))
-								.args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
-								.args(&["-o", "dts_viewer_tmp.dts"])
-								.arg(&file_path)
-								.output()
-								.expect("failed to execute process"); //TODO: properly handle errors
+		.args(&["-H", "-E", "-nostdinc"])
+		.arg(format!("-I{}", dts_folder))
+		.arg(format!("-I{}include/", dts_folder))
+		.args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
+		.args(&["-o", CPP_OUTPUT_NAME])
+		.arg(&file_path)
+		.output()
+		.expect("failed to execute process"); //TODO: properly handle errors
 
 
-	let global_file = File::open("dts_viewer_tmp.dts").unwrap();
+	let global_file = File::open(CPP_OUTPUT_NAME).unwrap();
 
 	let cpp_output = String::from_utf8_lossy(&include_output.stderr);
 	println!("{}", cpp_output);
 
-	let mut main_file = ParsedFile::new(
-			&Path::new(&file_path),
-			IncludeMethod::CPP(&global_file, vec![])
-	);
+	let mut main_file = ParsedFile::new(&Path::new(&file_path),
+										IncludeMethod::CPP(&global_file, vec![]));
 
 	parse_cpp_output(&mut cpp_output.lines(), &mut main_file, &global_file, 0);
 
-	let global_buffer = BufReader::new(File::open("dts_viewer_tmp.dts").unwrap());
-	let mut line_num = 0;
-	for line in global_buffer.lines() {
-		if let Ok(line) = line {
-			line_num += 1;
-			if !line.starts_with('#') {
-				continue;
-			}
-
-			//parse this shit
+	let global_buffer = BufReader::new(File::open(CPP_OUTPUT_NAME).unwrap());
+	let mut parsed_lines = global_buffer.lines()
+		.enumerate()
+		.filter(|&(_, ref line)| match *line {
+			Ok(ref l) => l.starts_with('#'),
+			Err(_) => false,
+		})
+		.map(|(line_num, line)| {
+			let line = line.unwrap();
 			let tokens: Vec<&str> = line.split('"').map(|s| s.trim_matches('#').trim()).collect();
-/*
-			if !main_file.contains(tokens[1]) {
-				println!("Not found: {:?}", tokens);
-				continue;
-			}
-*/
-			println!("{:?}", tokens);
-		} else {
-			//set last end as final line num count
+			let child_num: usize = tokens[0].parse().unwrap();
+			let flag = match tokens[2].parse().unwrap_or(0) { //TODO: make conversion function
+				1 => Some(LinemarkerFlag::Start),
+				2 => Some(LinemarkerFlag::Return),
+				3 => Some(LinemarkerFlag::System),
+				4 => Some(LinemarkerFlag::Extern),
+				_ => None,
+			};
+			(line_num + 1, child_num, tokens[1].to_string(), flag)
+		})
+		.peekable();
+
+	while let Some((path, mapping)) =
+		parse_cpp_linemarkers(&parsed_lines.next(), &parsed_lines.peek()) {
+		if mapping.len > 1 {
+			println!("{:?} {:?}", path, mapping);
+			// find file in ParsedFile tree
+			// add mapping to vec
 		}
 	}
 }
@@ -163,8 +174,11 @@ fn count_begining_chars(s: &str, c: char) -> usize {
 	count
 }
 
-fn parse_cpp_output<'a>(lines: &mut Lines<'a>, parrent_file: &mut ParsedFile<'a>, global_file: &'a File, depth: usize) {
-	while let Some(line) = lines.clone().next() {
+fn parse_cpp_output<'a>(lines: &mut Lines<'a>,
+						parrent_file: &mut ParsedFile<'a>,
+						global_file: &'a File,
+						depth: usize) {
+	while let Some(line) = lines.clone().next() { //TODO: try to use Peekable again. Had problems with recursion before
 		let count = count_begining_chars(line, '.');
 
 		if count == 0 {
@@ -175,19 +189,46 @@ fn parse_cpp_output<'a>(lines: &mut Lines<'a>, parrent_file: &mut ParsedFile<'a>
 			return;
 		} else if count > depth && (count - depth) == 1 {
 			parrent_file.included_files.push(
-				ParsedFile::new(
-					&Path::new(lines.next().unwrap().trim_left_matches('.').trim_left()),
-					IncludeMethod::CPP(&global_file, vec![])
-				)
-			);
-			parse_cpp_output(lines, parrent_file.included_files.last_mut().unwrap(), global_file, depth + 1);
+					ParsedFile::new(
+							&Path::new(lines.next()
+								.unwrap()
+								.trim_left_matches('.')
+								.trim_left()),
+							IncludeMethod::CPP(&global_file, vec![])
+			));
+			parse_cpp_output(lines,
+							 parrent_file.included_files.last_mut().unwrap(),
+							 global_file,
+							 depth + 1);
 		} else {
 			panic!("Match that should not have been reached.");
 		}
 	}
 }
-/*
-fn find_included_lines_end(lines: &mut Lines, start_tokens: &[&str], start_line: usize) -> (FileSlice, FileSlice) {
 
+fn parse_cpp_linemarkers(current: &Option<(usize, usize, String, Option<LinemarkerFlag>)>,
+						next: &Option<&(usize, usize, String, Option<LinemarkerFlag>)>)
+						-> Option<(PathBuf, FileMapping)> {
+	if let Some((c_line_num, c_child_num, ref c_path, _)) = *current {
+		if let Some(&(n_line_num, _, _, _)) = *next {
+			Some((PathBuf::from(c_path),
+				FileMapping {
+					parent_start: c_line_num + 1,
+					child_start: c_child_num,
+					len: n_line_num - c_line_num,
+			}))
+		} else {
+			let last_line = BufReader::new(File::open(CPP_OUTPUT_NAME).unwrap())
+				.lines()
+				.count(); //TODO: don't use lines() as that allocates new Strings on the heap
+			Some((PathBuf::from(c_path),
+				FileMapping {
+					parent_start: c_line_num + 1,
+					child_start: c_child_num,
+					len: last_line - c_line_num, // TODO: find length of file
+			}))
+		}
+	} else {
+		None
+	}
 }
-*/
