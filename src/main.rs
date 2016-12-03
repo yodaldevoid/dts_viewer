@@ -2,11 +2,11 @@ use std::env;
 use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs::File;
-use std::clone::Clone;
 use std::str::Lines;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fmt;
+use std::iter::Peekable;
 
 // Device Tree stucture
 /*
@@ -155,7 +155,7 @@ fn main() {
 	let mut root_file = ParsedFile::new(&Path::new(&file_path),
 										IncludeMethod::CPP(File::open(CPP_OUTPUT_NAME).unwrap(), vec![]));
 
-	parse_cpp_output(&mut cpp_output.lines(), &mut root_file, 0);
+	parse_cpp_output(&mut cpp_output.lines().peekable(), &mut root_file, 0);
 
 	let global_buffer = BufReader::new(File::open(CPP_OUTPUT_NAME).unwrap());
 	let mut parsed_lines = global_buffer.lines()
@@ -202,10 +202,10 @@ fn count_begining_chars(s: &str, c: char) -> usize {
 	count
 }
 
-fn parse_cpp_output<'a>(lines: &mut Lines<'a>,
+fn parse_cpp_output<'a>(lines: &mut Peekable<Lines<'a>>,
 						parrent_file: &mut ParsedFile<'a>,
 						depth: usize) {
-	while let Some(line) = lines.clone().next() { //TODO: try to use Peekable again. Had problems with recursion before
+	while let Some(line) = lines.peek().cloned() {
 		let count = count_begining_chars(line, '.');
 
 		if count == 0 {
