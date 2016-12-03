@@ -36,17 +36,17 @@ enum Property<'a> {
 struct ParsedFile<'a> {
 	path: &'a Path,
 	file: File,
-	method: IncludeMethod<'a>,
+	method: IncludeMethod,
 	included_files: Vec<ParsedFile<'a>>,
 }
 
 #[derive(Debug)]
-enum IncludeMethod<'a> {
+enum IncludeMethod {
 	DTS,
-	CPP(&'a File, Vec<FileMapping>),
+	CPP(File, Vec<FileMapping>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct FileMapping {
 	parent_start: usize,
 	child_start: usize,
@@ -73,12 +73,29 @@ struct Change<'a> {
 */
 
 impl<'a> ParsedFile<'a> {
-	fn new(path: &'a Path, method: IncludeMethod<'a>) -> ParsedFile<'a> {
+	fn new(path: &'a Path, method: IncludeMethod) -> ParsedFile<'a> {
 		ParsedFile {
 			path: path,
 			file: File::open(path).unwrap(),
 			method: method,
 			included_files: vec![],
+		}
+	}
+
+	fn assign_mapping(&mut self, path: &Path, mapping: FileMapping) -> Result<(), String> { //TODO: error propogation
+		if self.path == path {
+			match self.method {
+				IncludeMethod::CPP(_, ref mut mappings) => mappings.push(mapping),
+				IncludeMethod::DTS => unreachable!(),
+			};
+			Ok(())
+		} else {
+			for file in self.included_files.iter_mut() {
+				if file.assign_mapping(path, mapping).is_ok() {
+					return Ok(());
+				}
+			}
+			Err(format!("Did not find file: {:?}", path))
 		}
 	}
 }
@@ -119,16 +136,13 @@ fn main() {
 		.output()
 		.expect("failed to execute process"); //TODO: properly handle errors
 
-
-	let global_file = File::open(CPP_OUTPUT_NAME).unwrap();
-
 	let cpp_output = String::from_utf8_lossy(&include_output.stderr);
 	println!("{}", cpp_output);
 
-	let mut main_file = ParsedFile::new(&Path::new(&file_path),
-										IncludeMethod::CPP(&global_file, vec![]));
+	let mut root_file = ParsedFile::new(&Path::new(&file_path),
+										IncludeMethod::CPP(File::open(CPP_OUTPUT_NAME).unwrap(), vec![]));
 
-	parse_cpp_output(&mut cpp_output.lines(), &mut main_file, &global_file, 0);
+	parse_cpp_output(&mut cpp_output.lines(), &mut root_file, 0);
 
 	let global_buffer = BufReader::new(File::open(CPP_OUTPUT_NAME).unwrap());
 	let mut parsed_lines = global_buffer.lines()
@@ -155,9 +169,7 @@ fn main() {
 	while let Some((path, mapping)) =
 		parse_cpp_linemarkers(&parsed_lines.next(), &parsed_lines.peek()) {
 		if mapping.len > 1 {
-			println!("{:?} {:?}", path, mapping);
-			// find file in ParsedFile tree
-			// add mapping to vec
+			root_file.assign_mapping(path, mapping).unwrap();
 		}
 	}
 }
@@ -177,7 +189,6 @@ fn count_begining_chars(s: &str, c: char) -> usize {
 
 fn parse_cpp_output<'a>(lines: &mut Lines<'a>,
 						parrent_file: &mut ParsedFile<'a>,
-						global_file: &'a File,
 						depth: usize) {
 	while let Some(line) = lines.clone().next() { //TODO: try to use Peekable again. Had problems with recursion before
 		let count = count_begining_chars(line, '.');
@@ -195,14 +206,13 @@ fn parse_cpp_output<'a>(lines: &mut Lines<'a>,
 								.unwrap()
 								.trim_left_matches('.')
 								.trim_left()),
-							IncludeMethod::CPP(&global_file, vec![])
+							IncludeMethod::CPP(File::open(CPP_OUTPUT_NAME).unwrap(), Vec::new())
 			));
 			parse_cpp_output(lines,
 							 parrent_file.included_files.last_mut().unwrap(),
-							 global_file,
 							 depth + 1);
 		} else {
-			panic!("Match that should not have been reached.");
+			unreachable!();
 		}
 	}
 }
@@ -226,7 +236,7 @@ fn parse_cpp_linemarkers<'a>(current: &'a Option<(usize, usize, PathBuf, Option<
 				FileMapping {
 					parent_start: c_line_num + 1,
 					child_start: c_child_num,
-					len: last_line - c_line_num, // TODO: find length of file
+					len: last_line - c_line_num,
 			}))
 		}
 	} else {
