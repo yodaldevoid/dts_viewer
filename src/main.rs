@@ -105,13 +105,14 @@ fn main() {
 	};
 
 	let arch = "arm";
-	let dts_folder = format!("arch/{}/boot/dts/", arch);
-	let file_path = format!("{}{}", dts_folder, file_name);
+
+	let dts_folder = PathBuf::from("arch").join(arch).join("boot/dts/");
+	let file_path = dts_folder.join(file_name);
 
 	let include_output = Command::new("arm-linux-gnueabi-gcc")
 		.args(&["-H", "-E", "-nostdinc"])
-		.arg(format!("-I{}", dts_folder))
-		.arg(format!("-I{}include/", dts_folder))
+		.args(&["-I", dts_folder.to_str().unwrap()])
+		.args(&["-I", dts_folder.join("include/").to_str().unwrap()])
 		.args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
 		.args(&["-o", CPP_OUTPUT_NAME])
 		.arg(&file_path)
@@ -147,7 +148,7 @@ fn main() {
 				4 => Some(LinemarkerFlag::Extern),
 				_ => None,
 			};
-			(line_num + 1, child_num, tokens[1].to_string(), flag)
+			(line_num + 1, child_num, PathBuf::from(tokens[1]), flag)
 		})
 		.peekable();
 
@@ -206,12 +207,12 @@ fn parse_cpp_output<'a>(lines: &mut Lines<'a>,
 	}
 }
 
-fn parse_cpp_linemarkers(current: &Option<(usize, usize, String, Option<LinemarkerFlag>)>,
-						next: &Option<&(usize, usize, String, Option<LinemarkerFlag>)>)
-						-> Option<(PathBuf, FileMapping)> {
+fn parse_cpp_linemarkers<'a>(current: &'a Option<(usize, usize, PathBuf, Option<LinemarkerFlag>)>,
+						next: &Option<&(usize, usize, PathBuf, Option<LinemarkerFlag>)>)
+						-> Option<(&'a Path, FileMapping)> {
 	if let Some((c_line_num, c_child_num, ref c_path, _)) = *current {
 		if let Some(&(n_line_num, _, _, _)) = *next {
-			Some((PathBuf::from(c_path),
+			Some((c_path,
 				FileMapping {
 					parent_start: c_line_num + 1,
 					child_start: c_child_num,
@@ -221,7 +222,7 @@ fn parse_cpp_linemarkers(current: &Option<(usize, usize, String, Option<Linemark
 			let last_line = BufReader::new(File::open(CPP_OUTPUT_NAME).unwrap())
 				.lines()
 				.count(); //TODO: don't use lines() as that allocates new Strings on the heap
-			Some((PathBuf::from(c_path),
+			Some((c_path,
 				FileMapping {
 					parent_start: c_line_num + 1,
 					child_start: c_child_num,
