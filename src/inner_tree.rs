@@ -24,7 +24,7 @@ pub struct FileMapping {
 }
 
 impl<'a> ParsedFile<'a> {
-	pub fn new(path: &'a Path, method: IncludeMethod) -> ParsedFile<'a> {
+	pub fn new(path: &'a Path, method: IncludeMethod) -> Self {
 		ParsedFile {
 			path: path,
 			file: File::open(path).unwrap(),
