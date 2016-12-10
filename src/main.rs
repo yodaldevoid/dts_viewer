@@ -1,36 +1,43 @@
+#![feature(const_fn)]
+#![feature(box_syntax)]
+
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
+extern crate libc;
+
+mod inner_tree;
+mod cpp_parser;
+mod flex_bison;
+
+pub use flex_bison::{
+	data_free,
+
+	memreserve_add_label,
+	node_add_label,
+	vec_node_add_label,
+	property_add_label,
+
+	build_property,
+	build_property_delete,
+	chain_property,
+
+	build_node,
+	build_node_delete,
+	name_node,
+	chain_node,
+	merge_nodes,
+	delete_node,
+
+	build_boot_info,
+};
+
 use std::env;
 use std::process::Command;
 use std::path::{Path, PathBuf};
 
 use inner_tree::*;
 use cpp_parser::*;
-
-mod cpp_parser;
-mod inner_tree;
-
-// Device Tree stucture
-/*
-struct DeviceTree<'a> {
-	version: u32,
-	boot_cpuid: u32,
-	reserved_mem: Vec<(u64, u64)>,
-	root: Node<'a, 'a>,
-}
-
-struct DeviceNode<'a, 'b> {
-	name: String,
-	props: Vec<(String, Property<'a>)>,
-	children: Vec<DeviceNode<'b, 'b>>,
-}
-
-enum Property<'a> {
-	Empty,
-	Cells(Vec<u32>),
-	String(String),
-	ByteString(Vec<u8>),
-	Combo(Vec<&'a Property<'a>>),
-}
-*/
 
 // Change tracking
 /*
