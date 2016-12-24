@@ -1,10 +1,7 @@
-#![feature(const_fn)]
-#![feature(box_syntax)]
-
-#![allow(unused_variables)]
 #![allow(dead_code)]
 
 extern crate libc;
+extern crate byteorder;
 
 mod inner_tree;
 mod cpp_parser;
@@ -12,6 +9,12 @@ mod flex_bison;
 
 pub use flex_bison::{
 	data_free,
+	data_copy_escape_string,
+	//data_copy_file,
+	data_merge,
+	data_append_integer,
+	data_append_byte,
+	data_add_marker,
 
 	memreserve_add_label,
 	node_add_label,
@@ -28,6 +31,11 @@ pub use flex_bison::{
 	chain_node,
 	merge_nodes,
 	delete_node,
+	get_node_by_ref,
+
+	guess_boot_cpuid,
+	build_reserve_entry,
+	chain_reserve_entry,
 
 	build_boot_info,
 };
