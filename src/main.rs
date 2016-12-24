@@ -3,8 +3,12 @@
 extern crate libc;
 extern crate byteorder;
 
+#[macro_use]
+extern crate nom;
+
 mod inner_tree;
 mod cpp_parser;
+mod dts_parser;
 mod flex_bison;
 
 pub use flex_bison::{
@@ -46,6 +50,7 @@ use std::path::{Path, PathBuf};
 
 use inner_tree::*;
 use cpp_parser::*;
+use dts_parser::*;
 
 // Change tracking
 /*
