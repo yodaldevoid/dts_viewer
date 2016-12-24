@@ -39,16 +39,12 @@ fn parse_cpp_stderr<'a>(lines: &mut Peekable<Lines<'a>>,
 	while let Some(line) = lines.peek().cloned() {
 		let count = count_begining_chars(line, '.');
 
-		if count == 0 {
-			return;
-		} else if count < depth {
-			return;
-		} else if count == depth {
+		if count == 0 || count < depth || count == depth {
 			return;
 		} else if count > depth && (count - depth) == 1 {
 			parrent_file.included_files.push(
 					ParsedFile::new(
-							&Path::new(lines.next()
+							Path::new(lines.next()
 								.unwrap()
 								.trim_left_matches('.')
 								.trim_left()),

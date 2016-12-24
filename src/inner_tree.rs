@@ -41,7 +41,7 @@ impl<'a> ParsedFile<'a> {
 			};
 			Ok(())
 		} else {
-			for file in self.included_files.iter_mut() {
+			for file in &mut self.included_files {
 				if file.assign_mapping(path, mapping).is_ok() {
 					return Ok(());
 				}
