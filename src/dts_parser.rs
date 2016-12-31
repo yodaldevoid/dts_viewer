@@ -121,6 +121,15 @@ fn from_str_dec<T: FromStr>(s: &str) -> Result<T ,T::Err> {
 named!(eat_junk, do_parse!(many0!(alt_complete!(
 	delimited!(tag!("/*"), take_until!("*/"), tag!("*/")) |
 	delimited!(tag!("//"), not_line_ending, line_ending) |
+	do_parse!( //TODO: maybe actually parse the info. Or not.
+		tag!("#") >>
+		many1!(space) >>
+		many1!(digit) >>
+		many1!(space) >>
+		string: not_line_ending >>
+		line_ending >>
+		(string)
+	) |
 	multispace
 )) >> (&b""[..])));
 
