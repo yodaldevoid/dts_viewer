@@ -118,7 +118,7 @@ fn from_str_dec<T: FromStr>(s: &str) -> Result<T ,T::Err> {
  * This is dumb and feels wrong, but it works so I will complain no more.
  * Thank you to Filipe Gonçalves and https://crates.io/crates/config for the inspiration.
  */
-named!(eat_junk, do_parse!(many0!(alt_complete!(
+named!(eat_junk, do_parse!(many0!(alt!(
 	delimited!(tag!("/*"), take_until!("*/"), tag!("*/")) |
 	delimited!(tag!("//"), not_line_ending, line_ending) |
 	do_parse!( //TODO: maybe actually parse the info. Or not.
@@ -141,25 +141,25 @@ macro_rules! comments_ws (
 );
 
 //TODO: math operations
-named!(num_u64<u64>, alt_complete!(
+named!(num_u64<u64>, alt!(
 		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>)) |
 		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
 		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
 ));
 
-named!(num_u32<u32>, alt_complete!(
+named!(num_u32<u32>, alt!(
 		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u32>)) |
 		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u32>)) |
 		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u32>)
 ));
 
-named!(num_u16<u16>, alt_complete!(
+named!(num_u16<u16>, alt!(
 		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u16>)) |
 		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u16>)) |
 		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u16>)
 ));
 
-named!(num_u8<u8>, alt_complete!(
+named!(num_u8<u8>, alt!(
 		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u8>)) |
 		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>)) |
 		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u8>)
@@ -278,7 +278,7 @@ named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
 
 //TODO: labels in data
 //TODO: include binary
-named!(pub parse_data<Data>, comments_ws!(alt_complete!(
+named!(pub parse_data<Data>, comments_ws!(alt!(
 	delimited!(
 		char!('"'),
 		do_parse!(
@@ -325,7 +325,7 @@ named!(pub parse_prop<Property>, comments_ws!(do_parse!(
 )));
 
 named!(parse_node<Node>, comments_ws!(do_parse!(
-	name: map!(map_res!(alt_complete!(
+	name: map!(map_res!(alt!(
 		take_while1!(is_prop_node_char) |
 		tag!("/")
 	), str::from_utf8), String::from) >>
