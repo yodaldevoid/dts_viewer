@@ -478,7 +478,7 @@ mod tests {
 	}
 
 	#[test]
-	fn parse_data_string() {
+	fn parse_data_string_pain() {
 		assert_eq!(
 			parse_data(b"\"\\x7f\\0stuffstuff\\t\\t\\t\\n\\n\\n\""), 
 			IResult::Done(
