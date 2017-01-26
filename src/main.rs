@@ -9,40 +9,6 @@ extern crate nom;
 mod inner_tree;
 mod cpp_parser;
 mod dts_parser;
-mod flex_bison;
-
-pub use flex_bison::{
-	data_free,
-	data_copy_escape_string,
-	//data_copy_file,
-	data_merge,
-	data_append_integer,
-	data_append_byte,
-	data_add_marker,
-
-	memreserve_add_label,
-	node_add_label,
-	vec_node_add_label,
-	property_add_label,
-
-	build_property,
-	build_property_delete,
-	chain_property,
-
-	build_node,
-	build_node_delete,
-	name_node,
-	chain_node,
-	merge_nodes,
-	delete_node,
-	get_node_by_ref,
-
-	guess_boot_cpuid,
-	build_reserve_entry,
-	chain_reserve_entry,
-
-	build_boot_info,
-};
 
 use std::env;
 use std::process::Command;
