@@ -123,6 +123,7 @@ named!(eat_junk, do_parse!(many0!(alt!(
 	delimited!(tag!("//"), not_line_ending, line_ending) |
 	do_parse!( //TODO: maybe actually parse the info. Or not.
 		tag!("#") >>
+		opt!(tag!("line")) >>
 		many1!(space) >>
 		many1!(digit) >>
 		many1!(space) >>
