@@ -428,16 +428,8 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
 
 named!(pub parse_prop<Property>, comments_ws!(do_parse!(
 	labels: many0!(terminated!(parse_label, char!(':'))) >>
-	name: tap!(res:
-		map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) => {
-			println!("found {:?}", res)
-		}
-	) >>
-	data: tap!(res:
-		opt!(preceded!(char!('='), separated_nonempty_list!(comments_ws!(char!(',')), parse_data))) => {
-			println!("data {:?}", res)
-		}
-	) >>
+	name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
+	data: opt!(preceded!(char!('='), separated_nonempty_list!(comments_ws!(char!(',')), parse_data))) >>
 	char!(';') >>
 	(Property {deleted: false, name: name, val: data, labels: labels})
 )));
