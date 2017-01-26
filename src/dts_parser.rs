@@ -332,6 +332,7 @@ named!(pub parse_prop<Property>, comments_ws!(do_parse!(
 )));
 
 named!(parse_node<Node>, comments_ws!(do_parse!(
+	labels: many0!(terminated!(parse_label, char!(':'))) >>
 	name: map!(map_res!(alt!(
 		take_while1!(is_prop_node_char) |
 		tag!("/")
@@ -341,7 +342,7 @@ named!(parse_node<Node>, comments_ws!(do_parse!(
 	subnodes: many0!(parse_node) >>
 	char!('}') >>
 	char!(';') >>
-	(Node { name: name, deleted: false, proplist: props, children: subnodes, labels: Vec::new() })
+	(Node { name: name, deleted: false, proplist: props, children: subnodes, labels: labels })
 )));
 
 //TODO: stuff after main block
