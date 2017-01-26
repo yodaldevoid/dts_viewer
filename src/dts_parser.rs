@@ -386,7 +386,7 @@ pub fn parse_cell<'a>(input: &'a [u8], bits: usize) -> IResult<&'a [u8], (u64, O
 }
 
 named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
-	labels: many0!(parse_label) >>
+	labels: many0!(terminated!(parse_label, char!(':'))) >>
 	tag!("/memreserve/") >>
 	addr: integer >>
 	size: integer >>
