@@ -187,12 +187,18 @@ named!(parse_label<String>,
 	str::from_utf8), String::from)
 );
 
-named!(parse_ref<String>, preceded!(
-	char!('&'),
-	delimited!(
-		char!('{'),
-		map!(map_res!(take_while1!(is_path_char), str::from_utf8), String::from),
-		char!('}')
+named!(parse_ref<String>, alt!(
+	preceded!(
+		char!('&'),
+		delimited!(
+			char!('{'),
+			map!(map_res!(take_while1!(is_path_char), str::from_utf8), String::from),
+			char!('}')
+		)
+	) |
+	preceded!(
+		char!('&'),
+		map!(map_res!(take_while1!(is_label_char), str::from_utf8), String::from)
 	)
 ));
 
