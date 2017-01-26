@@ -467,6 +467,19 @@ pub fn parse_dt(source: &[u8]) {
 	println!("{:#?}", parse_dts(source));
 }
 
+//TODO: try not to eat whitespace past thing
+named!(pub parse_include<String>, ws!(preceded!(
+	tag!("/include/"),
+	delimited!(
+		char!('"'),
+		do_parse!(
+			val: escape_c_string >>
+			(val)
+		),
+		char!('"')
+	)
+)));
+
 #[cfg(test)]
 mod tests {
 	use super::*;
