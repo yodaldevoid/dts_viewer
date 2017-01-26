@@ -141,29 +141,140 @@ macro_rules! comments_ws (
 	} )
 );
 
-//TODO: math operations
-named!(num_u64<u64>, alt!(
-		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>)) |
-		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
-		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
-));
+named!(pub integer<u64>, alt_complete!(
+	comments_ws!(do_parse!( // neg
+		tag!("-") >>
+		a: integer >>
+		(a.wrapping_neg())
+	)) |
+	comments_ws!(do_parse!( // bit not
+		tag!("~") >>
+		a: integer >>
+		(a ^ u64::max_value())
+	)) |
+	comments_ws!(do_parse!( // not
+		tag!("!") >>
+		a: integer >>
+		(if a == 0 { 1 } else { 0 })
+	)) |
 
-named!(num_u32<u32>, alt!(
-		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u32>)) |
-		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u32>)) |
-		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u32>)
-));
+	comments_ws!(do_parse!( // mul
+		a: flat_map!(take_until_and_consume!("*"), integer) >>
+		b: integer >>
+		(a * b)
+	)) |
+	comments_ws!(do_parse!( // div
+		a: flat_map!(take_until_and_consume!("/"), integer) >>
+		b: integer >>
+		(a / b)
+	)) |
+	comments_ws!(do_parse!( // mod
+		a: flat_map!(take_until_and_consume!("%"), integer) >>
+		b: integer >>
+		(a % b)
+	)) |
 
-named!(num_u16<u16>, alt!(
-		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u16>)) |
-		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u16>)) |
-		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u16>)
-));
+	comments_ws!(do_parse!( // add
+		a: flat_map!(take_until_and_consume!("+"), integer) >>
+		b: integer >>
+		(a + b)
+	)) |
+	comments_ws!(do_parse!( // sub
+		a: flat_map!(take_until_and_consume!("-"), integer) >>
+		b: integer >>
+		(a - b)
+	)) |
 
-named!(num_u8<u8>, alt!(
-		preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u8>)) |
-		preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>)) |
-		map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u8>)
+	comments_ws!(do_parse!( // lshift
+		a: flat_map!(take_until_and_consume!("<<"), integer) >>
+		b: integer >>
+		(a << b)
+	)) |
+	comments_ws!(do_parse!( // rshift
+		a: flat_map!(take_until_and_consume!(">>"), integer) >>
+		b: integer >>
+		(a >> b)
+	)) |
+/*
+	comments_ws!(do_parse!( // lt
+		a: flat_map!(take_until_and_consume!("<"), integer) >>
+		b: integer >>
+		(if a < b { 1 } else { 0 })
+	)) |
+	comments_ws!(do_parse!( // gt
+		a: flat_map!(take_until_and_consume!(">"), integer) >>
+		b: integer >>
+		(if a > b { 1 } else { 0 })
+	)) |
+	comments_ws!(do_parse!( // le
+		a: flat_map!(take_until_and_consume!("<="), integer) >>
+		b: integer >>
+		(if a <= b { 1 } else { 0 })
+	)) |
+	comments_ws!(do_parse!( // ge
+		a: flat_map!(take_until_and_consume!(">="), integer) >>
+		b: integer >>
+		(if a >= b { 1 } else { 0 })
+	)) |
+
+	comments_ws!(do_parse!( // eq
+		a: flat_map!(take_until_and_consume!("=="), integer) >>
+		b: integer >>
+		(if a == b { 1 } else { 0 })
+	)) |
+	comments_ws!(do_parse!( // neq
+		a: flat_map!(take_until_and_consume!("!="), integer) >>
+		b: integer >>
+		(if a != b { 1 } else { 0 })
+	)) |
+*/
+	comments_ws!(do_parse!( // bitwise and
+		a: flat_map!(take_until_and_consume!("&"), integer) >>
+		b: integer >>
+		(a & b)
+	)) |
+
+	comments_ws!(do_parse!( // bitwise xor
+		a: flat_map!(take_until_and_consume!("^"), integer) >>
+		tag!("^") >>
+		b: integer >>
+		(a ^ b)
+	)) |
+
+	comments_ws!(do_parse!( // bitwise or
+		a: flat_map!(take_until_and_consume!("|"), integer) >>
+		b: integer >>
+		(a | b)
+	)) |
+/*
+	comments_ws!(do_parse!( // and
+		a: flat_map!(take_until_and_consume!("&&"), integer) >>
+		b: integer >>
+		(if a != 0 && b != 0 { 1 } else { 0 })
+	)) |
+
+	comments_ws!(do_parse!( // or
+		a: flat_map!(take_until_and_consume!("||"), integer) >>
+		b: integer >>
+		(if a != 0 || b != 0 { 1 } else { 0 })
+	)) |
+*/
+	comments_ws!(do_parse!( // trinary
+		a: flat_map!(take_until_and_consume!("?"), integer) >>
+		b: flat_map!(take_until_and_consume!(":"), integer) >>
+		c: integer >>
+		(if a != 0 { b } else { c })
+	)) |
+
+	tap!(res: comments_ws!(delimited!( // expressions
+		tap!(res: dbg_dmp!(char!('(')) => { println!("Open paren"); }),
+		integer,
+		dbg_dmp!(char!(')'))
+	)) => { println!("Close paren: {}", res); }) |
+
+	tap!(res: complete!(preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) => { println!("Hex: {}", res); }) |
+	tap!(res: preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) => { println!("Oct: {}", res); }) |
+	tap!(res: map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>) => { println!("Num: {}", res); })
 ));
 
 fn is_prop_node_char(c: u8) -> bool {
@@ -250,12 +361,12 @@ pub fn parse_cell<'a>(input: &'a [u8], bits: usize) -> IResult<&'a [u8], (u64, O
 
 	let parse_cell_internal = closure!(do_parse!(
 		num: opt!(alt!(
-			num_u64 |
-			map!(dbg_dmp!(delimited!(
+			integer |
+			map!(delimited!(
 				char!('\''),
 				escape_c_char,
-				dbg_dmp!(char!('\''))
-			)), u64::from)
+				char!('\'')
+			), u64::from)
 		)) >>
 		r: cond!(bits == 32 && num.is_none(), parse_ref) >>
 		(num.unwrap_or(0), r)
@@ -277,8 +388,8 @@ pub fn parse_cell<'a>(input: &'a [u8], bits: usize) -> IResult<&'a [u8], (u64, O
 named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
 	labels: many0!(parse_label) >>
 	tag!("/memreserve/") >>
-	addr: num_u64 >>
-	size: num_u64 >>
+	addr: integer >>
+	size: integer >>
 	char!(';') >>
 	(ReserveInfo { address: addr, size: size, labels: labels })
 )));
@@ -297,7 +408,7 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
 	do_parse!(
 		bits: opt!(comments_ws!(preceded!(
 			tag!("/bits/"),
-			num_u64
+			flat_map!(take_until!("<"), integer)
 		))) >>
 		char!('<') >>
 		val: separated_nonempty_list!(char!(' '), apply!(parse_cell, bits.unwrap_or(32) as usize)) >>
