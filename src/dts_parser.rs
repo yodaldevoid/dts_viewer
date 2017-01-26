@@ -600,7 +600,7 @@ mod tests {
 	}
 
 	#[test]
-	fn parse_data_sized_cells() {
+	fn parse_data_sized_cell_1() {
 		assert_eq!(
 			parse_data(b"/bits/ 8 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xde>"),
 			IResult::Done(&b""[..], Data::Cells(8, vec![
@@ -608,6 +608,10 @@ mod tests {
 				(b'\'' as u64, None), (0xFF, None), (0xDE, None)
 			]))
 		);
+	}
+
+	#[test]
+	fn parse_data_sized_cell_2() {
 		assert_eq!(
 			parse_data(b"/bits/ 16 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdead>"),
 			IResult::Done(&b""[..], Data::Cells(16, vec![
@@ -615,6 +619,10 @@ mod tests {
 				(b'\'' as u64, None), (0xFF, None), (0xDEAD, None)
 			]))
 		);
+	}
+
+	#[test]
+	fn parse_data_sized_cell_3() {
 		assert_eq!(
 			parse_data(b"/bits/ 32 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef>"),
 			IResult::Done(&b""[..], Data::Cells(32, vec![
@@ -622,6 +630,10 @@ mod tests {
 				(b'\'' as u64, None), (0xFF, None), (0xDEADBEEF, None)
 			]))
 		);
+	}
+
+	#[test]
+	fn parse_data_sized_cell_4() {
 		assert_eq!(
 			parse_data(b"/bits/ 64 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef00000000>"),
 			IResult::Done(&b""[..], Data::Cells(64, vec![
@@ -629,10 +641,18 @@ mod tests {
 				(b'\'' as u64, None), (0xFF, None), (0xDEADBEEF00000000, None)
 			]))
 		);
+	}
+
+	#[test]
+	fn parse_data_sized_cell_5() {
 		assert_eq!(
 			parse_data(b"<0x12345678 0x0000ffff>"),
 			IResult::Done(&b""[..], Data::Cells(32, vec![(0x12345678, None), (0x0000FFFF, None)]))
 		);
+	}
+
+	#[test]
+	fn parse_data_sized_cell_6() {
 		assert_eq!(
 			parse_data(b"/bits/ 16 <0x1234 0x5678 0x0 0xffff>"),
 			IResult::Done(&b""[..], Data::Cells(16,
@@ -643,4 +663,60 @@ mod tests {
 
 	//TODO: incorrect sized cells
 	//TODO: ref in non 32 bit cells
+
+	#[test]
+	fn parse_integer_1() {
+		assert_eq!(
+			integer(b"(64)"),
+			IResult::Done(&b""[..], 64)
+		);
+	}
+
+	#[test]
+	fn parse_integer_2() {
+		assert_eq!(
+			integer(b"(1 << 5)"),
+			IResult::Done(&b""[..], 32)
+		);
+	}
+
+	#[test]
+	fn parse_integer_3() {
+		assert_eq!(
+			integer(b"(((1 << 5)) | 7)"),
+			IResult::Done(&b""[..], 39)
+		);
+	}
+
+	#[test]
+	fn parse_integer_4() {
+		assert_eq!(
+			integer(b"((((50))))"),
+			IResult::Done(&b""[..], 50)
+		);
+	}
+
+	#[test]
+	fn parse_integer_5() {
+		assert_eq!(
+			integer(b"((((0x910)) & 0xffff) - (0x800))"),
+			IResult::Done(&b""[..], 272)
+		);
+	}
+
+	#[test]
+	fn parse_math_cell_1() {
+		assert_eq!(
+			parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) >"),
+			IResult::Done(&b""[..], Data::Cells(32, vec![(272, None)]))
+		);
+	}
+
+	#[test]
+	fn parse_math_cell_2() {
+		assert_eq!(
+			parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) (0 | 3) >"),
+			IResult::Done(&b""[..], Data::Cells(32, vec![(272, None), (0, None)]))
+		);
+	}
 }
