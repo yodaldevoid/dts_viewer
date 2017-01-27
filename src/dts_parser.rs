@@ -141,140 +141,292 @@ macro_rules! comments_ws (
 	} )
 );
 
+named!(opr_infix<OprInfix>, alt_complete!(
+	tag!("*") => { |_| OprInfix::Multiply } |
+	tag!("/") => { |_| OprInfix::Divide } |
+	tag!("%") => { |_| OprInfix::Modulus } |
+
+	tag!("+") => { |_| OprInfix::Add } |
+	tag!("-") => { |_| OprInfix::Subtract } |
+
+	tag!("<<") => { |_| OprInfix::LeftShift } |
+	tag!(">>") => { |_| OprInfix::RightShift } |
+
+	tag!("<=") => { |_| OprInfix::LesserEqual } |
+	tag!(">=") => { |_| OprInfix::GreaterEqual } |
+	tag!("<") => { |_| OprInfix::Lesser } |
+	tag!(">") => { |_| OprInfix::Greater } |
+	tag!("==") => { |_| OprInfix::Equal } |
+	tag!("!=") => { |_| OprInfix::NotEqual } |
+
+	tag!("&&") => { |_| OprInfix::And } |
+	tag!("||") => { |_| OprInfix::Or } |
+
+	tag!("&") => { |_| OprInfix::BitAnd } |
+	tag!("^") => { |_| OprInfix::BitXor } |
+	tag!("|") => { |_| OprInfix::BitOr }
+));
+
+#[derive(PartialEq, Debug)]
+enum OprInfix {
+	Multiply,
+	Divide,
+	Modulus,
+
+	Add,
+	Subtract,
+
+	LeftShift,
+	RightShift,
+
+	Lesser,
+	Greater,
+	LesserEqual,
+	GreaterEqual,
+	Equal,
+	NotEqual,
+
+	BitAnd,
+	BitXor,
+	BitOr,
+
+	And,
+	Or,
+}
+
+impl OprInfix {
+	fn apply(&self, a: u64, b: u64) -> u64 {
+		match *self {
+			OprInfix::Multiply => a * b,
+			OprInfix::Divide => a / b,
+			OprInfix::Modulus => a % b,
+
+			OprInfix::Add => a + b,
+			OprInfix::Subtract => a - b,
+
+			OprInfix::LeftShift => a << b,
+			OprInfix::RightShift => a >> b,
+
+			OprInfix::Lesser => if a < b { 1 } else { 0 },
+			OprInfix::Greater => if a > b { 1 } else { 0 },
+			OprInfix::LesserEqual => if a <= b { 1 } else { 0 },
+			OprInfix::GreaterEqual => if a >= b { 1 } else { 0 },
+			OprInfix::Equal => if a == b { 1 } else { 0 },
+			OprInfix::NotEqual => if a != b { 1 } else { 0 },
+
+			OprInfix::BitAnd => a & b,
+			OprInfix::BitXor => a ^ b,
+			OprInfix::BitOr => a | b,
+
+			OprInfix::And => if a != 0 && b != 0 { 1 } else { 0 },
+			OprInfix::Or => if a != 0 || b != 0 { 1 } else { 0 },
+		}
+	}
+}
+
+named!(opr_prefix<OprPrefix>, alt_complete!(
+	tag!("!") => { |_| OprPrefix::Not } |
+	tag!("~") => { |_| OprPrefix::BitNot } |
+	tag!("-") => { |_| OprPrefix::Negate }
+));
+
+#[derive(PartialEq, Debug)]
+enum OprPrefix {
+	Negate,
+	BitNot,
+	Not,
+}
+
+impl OprPrefix {
+	fn apply(&self, a: u64) -> u64 {
+		match *self {
+			OprPrefix::Negate => a.wrapping_neg(),
+			OprPrefix::BitNot => a ^ u64::max_value(),
+			OprPrefix::Not => if a == 0 { 1 } else { 0 },
+		}
+	}
+}
+
+#[derive(Debug)]
+enum Token {
+	Number(u64),
+	Prefix(OprPrefix),
+	Infix(OprInfix),
+	Paren
+}
+
+pub fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
+	let mut stack = Vec::new();
+	//println!("Input: {:?}", String::from_utf8_lossy(&input[..20]));
+	let mut buf = input;
+	loop {
+		//println!("Stack: {:?}", stack);
+		buf = if let IResult::Done(cleaned, _) = eat_junk(buf) {
+			//println!("cleaned: {}", String::from_utf8_lossy(cleaned));
+			if let IResult::Done(matched, num) = integer(cleaned) {
+				match stack.pop() {
+					None => {
+						//println!("Pop Nothing");
+						stack.push(Token::Number(num));
+					},
+					Some(Token::Paren) => {
+						//println!("Pop Paren");
+						stack.push(Token::Paren);
+						stack.push(Token::Number(num));
+					},
+					Some(Token::Prefix(ref x)) => {
+						//println!("Pop Prefix");
+						let num = x.apply(num);
+						stack.push(Token::Number(num));
+					},
+					Some(Token::Infix(ref x)) => {
+						//println!("Pop Infix");
+						if let Some(Token::Number(a)) = stack.pop() {
+							let num = x.apply(a, num);
+							stack.push(Token::Number(num));
+						} else {
+							return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+						}
+					},
+					Some(Token::Number(a)) if stack.is_empty() => return IResult::Done(buf, a),
+					_ => return IResult::Error(error_position!(ErrorKind::Custom(1), buf)),
+				};
+
+				matched
+			} else if let IResult::Done(matched, tok) = opr_infix(cleaned) {
+				//println!("Infix: {:?}", tok);
+				if let Some(&Token::Number(a)) = stack.last() {
+					if (tok == OprInfix::Greater || tok == OprInfix::BitAnd) && stack.len() == 1 {
+						if let IResult::Done(cleaned, _) = eat_junk(matched) {
+							let test = closure!(preceded!(
+								eat_junk,
+								alt!(
+									tag!("(") |
+									recognize!(opr_prefix) |
+									recognize!(integer)
+							)));
+							match test(cleaned) {
+								IResult::Done(_, _) => {},
+								_ => return IResult::Done(buf, a),
+							}
+						}
+					}
+					stack.push(Token::Infix(tok));
+				} else if tok == OprInfix::Subtract {
+					stack.push(Token::Prefix(OprPrefix::Negate));
+				} else {
+					return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+				};
+
+				matched
+			} else if let IResult::Done(matched, tok) = opr_prefix(cleaned) {
+				//println!("Prefix: {:?}", tok);
+				if let Some(&Token::Number(a)) = stack.last() {
+					if stack.len() == 1 {
+						return IResult::Done(buf, a)
+					}
+					return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+				} else {
+					stack.push(Token::Prefix(tok));
+				};
+
+				matched
+			} else if let Some(&c) = cleaned.first() {
+				match c {
+					b'(' => {
+						//println!("Paren");
+						match stack.pop() {
+							None => {
+								stack.push(Token::Paren);
+							},
+							Some(x @ Token::Paren) |
+							Some(x @ Token::Prefix(_)) |
+							Some(x @ Token::Infix(_)) => {
+								stack.push(x);
+								stack.push(Token::Paren);
+							},
+							Some(Token::Number(a)) => if stack.is_empty() {
+								return IResult::Done(buf, a)
+							} else {
+								return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+							},
+						};
+					},
+
+					b')' => {
+						//println!("Close");
+						if let Some(Token::Number(num)) = stack.pop() {
+							if let Some(Token::Paren) = stack.pop() {
+								match stack.pop() {
+									None => {
+										stack.push(Token::Number(num));
+									},
+									Some(Token::Paren) => {
+										stack.push(Token::Paren);
+										stack.push(Token::Number(num));
+									},
+									Some(Token::Prefix(ref x)) => {
+										let num = x.apply(num);
+										stack.push(Token::Number(num));
+									},
+									Some(Token::Infix(ref x)) => {
+										if let Some(Token::Number(a)) = stack.pop() {
+											let num = x.apply(a, num);
+											stack.push(Token::Number(num));
+										} else {
+											return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+										}
+									},
+									_ => return IResult::Error(error_position!(ErrorKind::Custom(1), buf)),
+								};
+							} else {
+								return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+							}
+						} else {
+							return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+						}
+					},
+
+					x => { println!("Unimplemented char: {}", x as char); return IResult::Error(error_position!(ErrorKind::Custom(1), buf)) },
+				}
+
+				&cleaned[1..]
+			} else {
+				//Incomplete
+				println!("Incomplete: {}", String::from_utf8_lossy(buf));
+				unreachable!()
+			}
+		} else {
+			//println!("Junk eating failed!?");
+			unreachable!()
+		};
+
+		if buf.len() == 0 {
+			if stack.len() == 1 {
+				if let Some(&Token::Number(num)) = stack.last() {
+					return IResult::Done(buf, num)
+				} else {
+					return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+				}
+			} else {
+				return IResult::Error(error_position!(ErrorKind::Custom(1), buf))
+			}
+		}
+	}
+}
+
 named!(pub integer<u64>, alt_complete!(
-	comments_ws!(do_parse!( // neg
-		tag!("-") >>
-		a: integer >>
-		(a.wrapping_neg())
-	)) |
-	comments_ws!(do_parse!( // bit not
-		tag!("~") >>
-		a: integer >>
-		(a ^ u64::max_value())
-	)) |
-	comments_ws!(do_parse!( // not
-		tag!("!") >>
-		a: integer >>
-		(if a == 0 { 1 } else { 0 })
-	)) |
-
-	comments_ws!(do_parse!( // mul
-		a: flat_map!(take_until_and_consume!("*"), integer) >>
-		b: integer >>
-		(a * b)
-	)) |
-	comments_ws!(do_parse!( // div
-		a: flat_map!(take_until_and_consume!("/"), integer) >>
-		b: integer >>
-		(a / b)
-	)) |
-	comments_ws!(do_parse!( // mod
-		a: flat_map!(take_until_and_consume!("%"), integer) >>
-		b: integer >>
-		(a % b)
-	)) |
-
-	comments_ws!(do_parse!( // add
-		a: flat_map!(take_until_and_consume!("+"), integer) >>
-		b: integer >>
-		(a + b)
-	)) |
-	comments_ws!(do_parse!( // sub
-		a: flat_map!(take_until_and_consume!("-"), integer) >>
-		b: integer >>
-		(a - b)
-	)) |
-
-	comments_ws!(do_parse!( // lshift
-		a: flat_map!(take_until_and_consume!("<<"), integer) >>
-		b: integer >>
-		(a << b)
-	)) |
-	comments_ws!(do_parse!( // rshift
-		a: flat_map!(take_until_and_consume!(">>"), integer) >>
-		b: integer >>
-		(a >> b)
-	)) |
 /*
-	comments_ws!(do_parse!( // lt
-		a: flat_map!(take_until_and_consume!("<"), integer) >>
-		b: integer >>
-		(if a < b { 1 } else { 0 })
-	)) |
-	comments_ws!(do_parse!( // gt
-		a: flat_map!(take_until_and_consume!(">"), integer) >>
-		b: integer >>
-		(if a > b { 1 } else { 0 })
-	)) |
-	comments_ws!(do_parse!( // le
-		a: flat_map!(take_until_and_consume!("<="), integer) >>
-		b: integer >>
-		(if a <= b { 1 } else { 0 })
-	)) |
-	comments_ws!(do_parse!( // ge
-		a: flat_map!(take_until_and_consume!(">="), integer) >>
-		b: integer >>
-		(if a >= b { 1 } else { 0 })
-	)) |
-
-	comments_ws!(do_parse!( // eq
-		a: flat_map!(take_until_and_consume!("=="), integer) >>
-		b: integer >>
-		(if a == b { 1 } else { 0 })
-	)) |
-	comments_ws!(do_parse!( // neq
-		a: flat_map!(take_until_and_consume!("!="), integer) >>
-		b: integer >>
-		(if a != b { 1 } else { 0 })
-	)) |
-*/
-	comments_ws!(do_parse!( // bitwise and
-		a: flat_map!(take_until_and_consume!("&"), integer) >>
-		b: integer >>
-		(a & b)
-	)) |
-
-	comments_ws!(do_parse!( // bitwise xor
-		a: flat_map!(take_until_and_consume!("^"), integer) >>
-		tag!("^") >>
-		b: integer >>
-		(a ^ b)
-	)) |
-
-	comments_ws!(do_parse!( // bitwise or
-		a: flat_map!(take_until_and_consume!("|"), integer) >>
-		b: integer >>
-		(a | b)
-	)) |
-/*
-	comments_ws!(do_parse!( // and
-		a: flat_map!(take_until_and_consume!("&&"), integer) >>
-		b: integer >>
-		(if a != 0 && b != 0 { 1 } else { 0 })
-	)) |
-
-	comments_ws!(do_parse!( // or
-		a: flat_map!(take_until_and_consume!("||"), integer) >>
-		b: integer >>
-		(if a != 0 || b != 0 { 1 } else { 0 })
-	)) |
-*/
 	comments_ws!(do_parse!( // trinary
 		a: flat_map!(take_until_and_consume!("?"), integer) >>
 		b: flat_map!(take_until_and_consume!(":"), integer) >>
 		c: integer >>
 		(if a != 0 { b } else { c })
 	)) |
-
-	tap!(res: comments_ws!(delimited!( // expressions
-		tap!(res: dbg_dmp!(char!('(')) => { println!("Open paren"); }),
-		integer,
-		dbg_dmp!(char!(')'))
-	)) => { println!("Close paren: {}", res); }) |
-
-	tap!(res: complete!(preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) => { println!("Hex: {}", res); }) |
-	tap!(res: preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) => { println!("Oct: {}", res); }) |
-	tap!(res: map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>) => { println!("Num: {}", res); })
+*/
+	complete!(preceded!(tag_no_case!("0x"), map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) |
+	preceded!(tag_no_case!("0"), map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
+	map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
 ));
 
 fn is_prop_node_char(c: u8) -> bool {
@@ -361,7 +513,7 @@ pub fn parse_cell<'a>(input: &'a [u8], bits: usize) -> IResult<&'a [u8], (u64, O
 
 	let parse_cell_internal = closure!(do_parse!(
 		num: opt!(alt!(
-			integer |
+			parse_c_expr |
 			map!(delimited!(
 				char!('\''),
 				escape_c_char,
@@ -388,8 +540,8 @@ pub fn parse_cell<'a>(input: &'a [u8], bits: usize) -> IResult<&'a [u8], (u64, O
 named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
 	labels: many0!(terminated!(parse_label, char!(':'))) >>
 	tag!("/memreserve/") >>
-	addr: integer >>
-	size: integer >>
+	addr: parse_c_expr >>
+	size: parse_c_expr >>
 	char!(';') >>
 	(ReserveInfo { address: addr, size: size, labels: labels })
 )));
@@ -411,7 +563,7 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
 			flat_map!(take_until!("<"), integer)
 		))) >>
 		char!('<') >>
-		val: separated_nonempty_list!(char!(' '), apply!(parse_cell, bits.unwrap_or(32) as usize)) >>
+		val: separated_nonempty_list!(eat_junk, apply!(parse_cell, bits.unwrap_or(32) as usize)) >>
 		char!('>') >>
 		( Data::Cells(bits.unwrap_or(32) as usize, val) )
 	) |
@@ -680,7 +832,7 @@ mod tests {
 	#[test]
 	fn parse_integer_1() {
 		assert_eq!(
-			integer(b"(64)"),
+			parse_c_expr(b"(64)"),
 			IResult::Done(&b""[..], 64)
 		);
 	}
@@ -688,7 +840,7 @@ mod tests {
 	#[test]
 	fn parse_integer_2() {
 		assert_eq!(
-			integer(b"(1 << 5)"),
+			parse_c_expr(b"(1 << 5)"),
 			IResult::Done(&b""[..], 32)
 		);
 	}
@@ -696,7 +848,7 @@ mod tests {
 	#[test]
 	fn parse_integer_3() {
 		assert_eq!(
-			integer(b"(((1 << 5)) | 7)"),
+			parse_c_expr(b"(((1 << 5)) | 7)"),
 			IResult::Done(&b""[..], 39)
 		);
 	}
@@ -704,7 +856,7 @@ mod tests {
 	#[test]
 	fn parse_integer_4() {
 		assert_eq!(
-			integer(b"((((50))))"),
+			parse_c_expr(b"((((50))))"),
 			IResult::Done(&b""[..], 50)
 		);
 	}
@@ -712,7 +864,7 @@ mod tests {
 	#[test]
 	fn parse_integer_5() {
 		assert_eq!(
-			integer(b"((((0x910)) & 0xffff) - (0x800))"),
+			parse_c_expr(b"((((0x910)) & 0xffff) - (0x800))"),
 			IResult::Done(&b""[..], 272)
 		);
 	}
@@ -729,7 +881,7 @@ mod tests {
 	fn parse_math_cell_2() {
 		assert_eq!(
 			parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) (0 | 3) >"),
-			IResult::Done(&b""[..], Data::Cells(32, vec![(272, None), (0, None)]))
+			IResult::Done(&b""[..], Data::Cells(32, vec![(272, None), (3, None)]))
 		);
 	}
 }
