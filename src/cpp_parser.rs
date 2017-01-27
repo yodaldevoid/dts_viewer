@@ -29,12 +29,15 @@ fn count_begining_chars(s: &str, c: char) -> usize {
 }
 
 pub fn parse_cpp_outputs<'a>(cpp_stderr: &'a str, cpp_output: &Path, root_file: &mut ParsedFile<'a>) {
-	parse_cpp_stderr(&mut cpp_stderr.lines().peekable(), root_file, 0);
-	parse_cpp_file(cpp_output, root_file);
+	parse_cpp_stderr(&mut cpp_stderr.lines().peekable(), &mut root_file, 0);
+	//println!("{:#?}", root_file);
+	parse_cpp_file(cpp_output, &mut root_file);
+	//println!("{:#?}", root_file);
 }
 
-fn parse_cpp_stderr<'a>(lines: &mut Peekable<Lines<'a>>,
-							parrent_file: &mut ParsedFile<'a>,
+// parse stderr to get the include tree
+fn parse_cpp_stderr(lines: &mut Peekable<Lines>,
+							parent_file: &mut ParsedFile,
 							depth: usize) {
 	while let Some(line) = lines.peek().cloned() {
 		let count = count_begining_chars(line, '.');
@@ -42,16 +45,16 @@ fn parse_cpp_stderr<'a>(lines: &mut Peekable<Lines<'a>>,
 		if count == 0 || count < depth || count == depth {
 			return;
 		} else if count > depth && (count - depth) == 1 {
-			parrent_file.included_files.push(
-					ParsedFile::new(
-							Path::new(lines.next()
-								.unwrap()
-								.trim_left_matches('.')
-								.trim_left()),
-							IncludeMethod::CPP(Vec::new())
+			parent_file.add_include(
+				ParsedFile::new(
+					PathBuf::from(lines.next()
+						.unwrap()
+						.trim_left_matches('.')
+						.trim_left()),
+					IncludeMethod::CPP
 			));
 			parse_cpp_stderr(lines,
-							 parrent_file.included_files.last_mut().unwrap(),
+							 parent_file.included_files.last_mut().unwrap(),
 							 depth + 1);
 		} else {
 			unreachable!();
@@ -59,7 +62,8 @@ fn parse_cpp_stderr<'a>(lines: &mut Peekable<Lines<'a>>,
 	}
 }
 
-fn parse_cpp_file<'a>(cpp_output: &Path, root_file: &mut ParsedFile<'a>) {
+// parse preprocessed file to find starts (and stops) of included files
+fn parse_cpp_file(cpp_output: &Path, root_file: &mut ParsedFile) {
 	let global_buffer = BufReader::new(File::open(cpp_output).unwrap());
 	let mut parsed_lines = global_buffer.lines()
 		.enumerate()
@@ -70,7 +74,7 @@ fn parse_cpp_file<'a>(cpp_output: &Path, root_file: &mut ParsedFile<'a>) {
 		.map(|(line_num, line)| {
 			let line = line.unwrap();
 			let tokens: Vec<&str> = line.split('"').map(|s| s.trim_matches('#').trim()).collect();
-			let child_num: usize = tokens[0].parse().unwrap();
+			let child_num: usize = tokens[0].parse().unwrap();  //TODO: check length before assuming
 			let flag = match tokens[2].parse().unwrap_or(0) { //TODO: make conversion function
 				1 => Some(LinemarkerFlag::Start),
 				2 => Some(LinemarkerFlag::Return),
@@ -82,37 +86,54 @@ fn parse_cpp_file<'a>(cpp_output: &Path, root_file: &mut ParsedFile<'a>) {
 		})
 		.peekable();
 
-	while let Some((path, mapping)) =
-		parse_cpp_linemarkers(&parsed_lines.next(), &parsed_lines.peek(), Path::new(cpp_output)) {
-		if mapping.len > 1 {
-			root_file.assign_mapping(path, mapping).unwrap();
+	while let Some((path, mapping)) = parse_cpp_linemarkers(&parsed_lines.next(),
+											&parsed_lines.peek(),
+											Path::new(cpp_output)).unwrap() {
+		if let Some(m) = mapping {
+			root_file.assign_mapping(path, m);
 		}
 	}
 }
 
 fn parse_cpp_linemarkers<'a>(current: &'a Option<(usize, usize, PathBuf, Option<LinemarkerFlag>)>,
 								next: &Option<&(usize, usize, PathBuf, Option<LinemarkerFlag>)>,
-								cpp_output: &Path) -> Option<(&'a Path, FileMapping)> {
+								cpp_output: &Path) -> Result<Option<(&'a Path, Option<FileMapping>)>, String> {
 	if let Some((c_line_num, c_child_num, ref c_path, _)) = *current {
 		if let Some(&(n_line_num, _, _, _)) = *next {
-			Some((c_path,
-				FileMapping {
-					parent_start: c_line_num + 1,
-					child_start: c_child_num,
-					len: n_line_num - c_line_num,
-			}))
+			Ok(Some((c_path,
+				if n_line_num - c_line_num > 1 {
+					Some(FileMapping {
+						parent_start: line_to_byte_offset(File::open(cpp_output)
+								.expect(&format!("File not found: {}", cpp_output.to_str().unwrap()))
+								.bytes().filter_map(|e| e.ok()), c_line_num + 1)?,
+						child_start: line_to_byte_offset(File::open(c_path)
+								.expect(&format!("File not found: {}", c_path.to_str().unwrap()))
+								.bytes().filter_map(|e| e.ok()), c_child_num)?,
+						len: line_to_byte_offset(File::open(cpp_output)
+								.expect(&format!("File not found: {}", cpp_output.to_str().unwrap()))
+								.bytes().filter_map(|e| e.ok()), n_line_num)? 
+							- line_to_byte_offset(File::open(cpp_output)
+									.expect(&format!("File not found: {}", cpp_output.to_str().unwrap()))
+									.bytes().filter_map(|e| e.ok()), c_line_num + 1)?,
+					})
+				} else {
+					None
+				}
+			)))
 		} else {
-			let last_line = BufReader::new(File::open(cpp_output).unwrap())
-				.lines()
-				.count(); //TODO: don't use lines() as that allocates new Strings on the heap
-			Some((c_path,
-				FileMapping {
-					parent_start: c_line_num + 1,
-					child_start: c_child_num,
-					len: last_line - c_line_num,
-			}))
+			let last_byte = File::open(cpp_output).unwrap().bytes().count();
+			Ok(Some((c_path,
+					Some(FileMapping {
+						parent_start: line_to_byte_offset(File::open(cpp_output).unwrap().bytes()
+								.filter_map(|e| e.ok()), c_line_num + 1)?,
+						child_start: line_to_byte_offset(File::open(c_path).unwrap().bytes()
+								.filter_map(|e| e.ok()), c_child_num)?,
+						len: last_byte - line_to_byte_offset(File::open(cpp_output).unwrap().bytes()
+								.filter_map(|e| e.ok()), c_line_num + 1)?,
+					})
+			)))
 		}
 	} else {
-		None
+		Ok(None)
 	}
 }

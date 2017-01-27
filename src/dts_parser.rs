@@ -613,7 +613,6 @@ named!(parse_dts<BootInfo>, comments_ws!(do_parse!(
 //TODO: imports
 //TODO: delete nodes
 //TODO: delete props
-//TODO: cpp linemarkers
 //TODO: error messages
 pub fn parse_dt(source: &[u8]) {
 	println!("{:#?}", parse_dts(source));
