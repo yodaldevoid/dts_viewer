@@ -12,7 +12,7 @@ mod dts_parser;
 
 use std::env;
 use std::process::Command;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 
 use cpp_parser::*;
 use dts_parser::*;
@@ -30,6 +30,19 @@ struct Change<'a> {
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
+/*
+ *	General idea:
+ *		-Run CPP
+ *		Parse file for DTS includes and replace with include contents
+ *		Find byte starts/ends for each file
+ *		Parse file to create device tree and create hashmap of objects to byte offset starting points
+ *		Parse device tree to create changes
+ *		Use hashmap and file starts to pair changes to file byte offsets
+ *		Turn file byte offsets to file lines/rows
+ *		???
+ *		Profit!
+ *		Oh, and somehow display the damn information
+ */
 fn main() {
 	let file_name = match env::args().nth(1) {
 		None => {
@@ -39,20 +52,26 @@ fn main() {
 		Some(x) => x,
 	};
 
-	let arch = "arm";
+	let file = Path::new(&file_name);
+	let parent = file.parent().unwrap();
 
-	let dts_folder = PathBuf::from("arch").join(arch).join("boot/dts/");
-	let file_path = dts_folder.join(file_name);
-
-	let include_output = Command::new("arm-linux-gnueabi-gcc")
-		.args(&["-H", "-E", "-nostdinc"])
-		.args(&["-I", dts_folder.to_str().unwrap()])
-		.args(&["-I", dts_folder.join("include/").to_str().unwrap()])
+	let mut cpp_command = Command::new("arm-linux-gnueabi-gcc");
+	cpp_command.args(&["-H", "-E", "-nostdinc"])
 		.args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
 		.args(&["-o", CPP_OUTPUT_NAME])
-		.arg(&file_path)
-		.output()
-		.expect("failed to execute process"); //TODO: properly handle errors
+		.arg(&file_name);
+
+	//TODO: cmd line option to turn off automatic includes just grab the file
+	//TODO: allow passing of additional include directories
+	//if default_includes {
+		cpp_command.args(&["-I", parent.to_str().unwrap()]);
+		let include_dir = parent.join("include/");
+		if include_dir.is_dir() {
+			cpp_command.args(&["-I", parent.join("include/").to_str().unwrap()]);
+		}
+	//}
+
+	let include_output = cpp_command.output().expect("failed to execute process"); //TODO: properly handle errors
 
 	let cpp_stderr = String::from_utf8_lossy(&include_output.stderr);
 	println!("{}", cpp_stderr);
