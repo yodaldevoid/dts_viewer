@@ -5,7 +5,10 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::iter::Peekable;
 
+use nom::IResult;
+
 use inner_tree::*;
+use dts_parser::parse_include;
 
 #[derive(Debug)]
 pub enum LinemarkerFlag {
@@ -28,11 +31,14 @@ fn count_begining_chars(s: &str, c: char) -> usize {
 	count
 }
 
-pub fn parse_cpp_outputs<'a>(cpp_stderr: &'a str, cpp_output: &Path, root_file: &mut ParsedFile<'a>) {
+pub fn parse_cpp_outputs<'a>(cpp_stderr: &'a str, cpp_output: &Path, root_file_name: &str) -> Result<(ParsedFile, Vec<u8>), String> {
+	let mut root_file = ParsedFile::new(PathBuf::from(&root_file_name), IncludeMethod::CPP);
 	parse_cpp_stderr(&mut cpp_stderr.lines().peekable(), &mut root_file, 0);
 	//println!("{:#?}", root_file);
 	parse_cpp_file(cpp_output, &mut root_file);
 	//println!("{:#?}", root_file);
+	let result = include_dts_files(cpp_output, &mut root_file, 0)?;
+	Ok((root_file, result))
 }
 
 // parse stderr to get the include tree
@@ -135,5 +141,92 @@ fn parse_cpp_linemarkers<'a>(current: &'a Option<(usize, usize, PathBuf, Option<
 		}
 	} else {
 		Ok(None)
+	}
+}
+
+fn include_dts_files(file: &Path, root_file: &mut ParsedFile, main_offset: usize) -> Result<Vec<u8>, String> {
+	let mut file = File::open(file).unwrap();
+	let mut buffer: Vec<u8> = Vec::new();
+
+	let mut string_buffer = String::new();
+	file.read_to_string(&mut string_buffer).map_err(|_| "IO Error".to_string())?;
+
+	let mut buf = string_buffer.as_bytes();
+	loop {
+		//go until /include/
+		buf = if let Some(offset) = buf.windows(9).position(|sub| sub == b"/include/") {
+			buffer.extend_from_slice(&buf[..offset]);
+			if let IResult::Done(rem, file) = parse_include(&buf[offset..]) {
+				//println!("{}", file);
+				//println!("Offset: {}", offset);
+				//println!("{:#?}", root_file);
+
+				let eaten_len = (buf.len() - offset) - rem.len();
+
+				let included_path = Path::new(&file);
+				let mut included_file = ParsedFile::new(included_path.to_path_buf(), IncludeMethod::DTS);
+				let total_len = buffer.len() + main_offset;
+				included_file.mappings.push(
+					FileMapping {
+						parent_start: total_len,
+						child_start: 0,
+						len: File::open(&included_path).unwrap().bytes().count(), //TODO: check from parent directory of root file
+					}
+				);
+				buffer.extend(include_dts_files(included_path, &mut included_file, total_len)?);
+
+				let (inc_start, inc_end) = included_file.bounds_of_tree()?;
+				root_file.offset_after_location(inc_start, inc_end as isize - inc_start as isize);
+				//println!("After offset");
+				//println!("{:#?}", root_file);
+
+				{
+					let inc_file = root_file.file_from_offset_mut(inc_start)?;
+					inc_file.split_mappings(inc_start, inc_end, eaten_len);
+					inc_file.add_include(included_file);
+				}
+				//println!("After split");
+				//println!("{:#?}", root_file);
+
+				rem
+			} else {
+				buffer.extend_from_slice(&buf[offset..offset + 9]);
+				&buf[offset + 9..]
+			}
+		} else {
+			//no more includes, just add the rest and return
+			buffer.extend(buf);
+			return Ok(buffer);
+		};
+	}
+}
+
+pub fn line_to_byte_offset<I: Iterator<Item = u8>>(bytes: I, line: usize) -> Result<usize, String> {
+	if line == 1 {
+		Ok(0)
+	} else {
+		bytes.enumerate()
+			.filter(|&(_, byte)| byte == b'\n')
+			.nth(line - 2)
+			.map(|(offset, _)| offset)
+			.ok_or_else(|| "Failed converting from line to byte offset".to_string())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn lines_to_bytes() {
+		let string = "Howdy\nHow goes it\nI'm doing fine\n";
+		assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 1).unwrap(), 0);
+		assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 2).unwrap(), 5);
+		assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 3).unwrap(), 17);
+	}
+
+	#[test]
+	fn bytes_to_lines() {
+
 	}
 }

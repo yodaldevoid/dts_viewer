@@ -14,7 +14,6 @@ use std::env;
 use std::process::Command;
 use std::path::{Path, PathBuf};
 
-use inner_tree::*;
 use cpp_parser::*;
 use dts_parser::*;
 
@@ -58,9 +57,10 @@ fn main() {
 	let cpp_stderr = String::from_utf8_lossy(&include_output.stderr);
 	println!("{}", cpp_stderr);
 
-	let mut root_file = ParsedFile::new(&Path::new(&file_path), IncludeMethod::CPP(Vec::new()));
-
-	parse_cpp_outputs(&cpp_stderr, Path::new(CPP_OUTPUT_NAME), &mut root_file);
+	let (root_file, buffer) = match parse_cpp_outputs(&cpp_stderr, Path::new(CPP_OUTPUT_NAME), &file_name) {
+		Ok(v) => v,
+		Err(e) => {println!("{}", e); return},
+	};
 
 	println!("{}", root_file);
 }
