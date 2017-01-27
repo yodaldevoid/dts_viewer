@@ -506,7 +506,7 @@ named!(escape_c_char<u8>, alt!(
 	take!(1) => { |c: &[u8]| c[0] }
 ));
 
-pub fn parse_cell<'a>(input: &'a [u8], bits: usize) -> IResult<&'a [u8], (u64, Option<String>)> {
+pub fn parse_cell(input: &[u8], bits: usize) -> IResult<&[u8], (u64, Option<String>)> {
 	if bits != 8 && bits != 16 && bits != 32 && bits != 64 {
 		return IResult::Error(error_position!(ErrorKind::Custom(1), input));
 	}
@@ -600,22 +600,50 @@ named!(parse_node<Node>, comments_ws!(do_parse!(
 	(Node { name: name, deleted: false, proplist: props, children: subnodes, labels: labels })
 )));
 
+named!(parse_ammend<Node>, comments_ws!(do_parse!(
+	labels: many0!(terminated!(parse_label, char!(':'))) >>
+	name: alt!(
+		map!(map_res!(tag!("/"), str::from_utf8), String::from) |
+		call!(parse_ref)
+	) >>
+	char!('{') >>
+	props: many0!(parse_prop) >>
+	subnodes: many0!(parse_node) >>
+	char!('}') >>
+	char!(';') >>
+	(Node { name: name, deleted: false, proplist: props, children: subnodes, labels: labels })
+)));
+
 //TODO: stuff after main block
 named!(parse_device_tree<Node>, comments_ws!(preceded!(peek!(char!('/')), parse_node)));
 
-named!(parse_dts<BootInfo>, comments_ws!(do_parse!(
+named!(parse_dts<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
 	tag!("/dts-v1/;") >>
 	mem_reserves: many0!(parse_mem_reserve) >>
 	device_tree: parse_device_tree >>
-	(BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 })
+	ammendments: many0!(parse_ammend) >>
+	(BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
 )));
 
 //TODO: imports
 //TODO: delete nodes
 //TODO: delete props
 //TODO: error messages
-pub fn parse_dt(source: &[u8]) {
-	println!("{:#?}", parse_dts(source));
+pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
+	match parse_dts(source) {
+		IResult::Done(remaining, device_tree) => {
+			if remaining.len() > 0 {
+				Err(format!("Remaining input after completion: {}", String::from_utf8_lossy(remaining)))
+			} else {
+				Ok(device_tree)
+			}
+		},
+		IResult::Incomplete(_) => Err("Incomplete input".to_string()),
+		IResult::Error(err) => {
+			//println!("{:?}", );
+			Err(format!("Error during parsing: {:?}", err))
+		},
+	}
 }
 
 //TODO: try not to eat whitespace past thing

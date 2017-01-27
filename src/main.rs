@@ -63,4 +63,12 @@ fn main() {
 	};
 
 	println!("{}", root_file);
+	println!("{}", String::from_utf8_lossy(&buffer));
+
+	match parse_dt(&buffer) {
+		Ok(dt) => println!("{:#?}", dt),
+		Err(err) => println!("{:?}", err),
+	}
+
+	//TODO: delete CPP output
 }
