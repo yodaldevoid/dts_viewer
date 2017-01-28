@@ -13,6 +13,7 @@ mod dts_parser;
 use std::env;
 use std::process::Command;
 use std::path::Path;
+use std::fs::remove_file;
 
 use cpp_parser::*;
 use dts_parser::*;
@@ -94,5 +95,8 @@ fn main() {
         Err(err) => println!("{:?}", err),
     }
 
-    // TODO: delete CPP output
+    match remove_file(Path::new(CPP_OUTPUT_NAME)) {
+        Ok(_) => {},
+        Err(e) => println!("Failed to delete temp file: {:?}", e),
+    }
 }
