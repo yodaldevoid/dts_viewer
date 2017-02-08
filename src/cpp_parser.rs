@@ -96,7 +96,7 @@ fn parse_cpp_file(cpp_output: &Path, root_file: &mut ParsedFile) {
                               Path::new(cpp_output))
             .unwrap() {
         if let Some(m) = mapping {
-            root_file.assign_mapping(path, m);
+            root_file.assign_mapping(path, m).expect("Failed to assign mapping");
         }
     }
 }
