@@ -45,52 +45,59 @@ impl Labeled for ReserveInfo {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Node {
-    deleted: bool,
-    name: String,
-    proplist: Vec<Property>,
-    children: Vec<Node>,
+pub enum Node {
+    Deleted(String),
+    Existing {
+        name: String,
+        proplist: Vec<Property>,
+        children: Vec<Node>,
 
-    // fullpath: Option<PathBuf>,
-    // length to the # part of node_name@#
-    // basenamelen: usize,
-    //
-    // phandle: u32,
-    // addr_cells: i32,
-    // size_cells: i32,
-    labels: Vec<String>,
+        // fullpath: Option<PathBuf>,
+        // length to the # part of node_name@#
+        // basenamelen: usize,
+        //
+        // phandle: u32,
+        // addr_cells: i32,
+        // size_cells: i32,
+        labels: Vec<String>,
+    }
 }
 
 impl Labeled for Node {
     fn add_label(&mut self, label: &str) {
-        let label = label.to_string();
-        if !self.labels.contains(&label) {
-            self.labels.push(label);
+        match *self {
+            Node::Deleted(_) => panic!("Why are you adding a label to a deleted node?!"),
+            Node::Existing{ ref mut labels, .. } => {
+                let label = label.to_string();
+                if labels.contains(&label) {
+                    labels.push(label);
+                }
+            }
         }
     }
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Property {
-    deleted: bool,
-    name: String,
-    val: Option<Vec<Data>>,
-    labels: Vec<String>,
+pub enum Property {
+    Deleted(String),
+    Existing {
+        name: String,
+        val: Option<Vec<Data>>,
+        labels: Vec<String>,
+    }
 }
 
 impl Labeled for Property {
     fn add_label(&mut self, label: &str) {
-        let label = label.to_string();
-        if !self.labels.contains(&label) {
-            self.labels.push(label);
+        match *self {
+            Property::Deleted(_) => panic!("Why are you adding a label to a deleted property?!"),
+            Property::Existing{ ref mut labels, .. } => {
+                let label = label.to_string();
+                if labels.contains(&label) {
+                    labels.push(label);
+                }
+            }
         }
-    }
-}
-
-impl Property {
-    fn delete(&mut self) {
-        self.deleted = true;
-        self.labels.clear();
     }
 }
 
@@ -583,28 +590,44 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
     do_parse!(val: parse_ref >> (Data::Reference(val)))
 )));
 
-named!(pub parse_prop<Property>, comments_ws!(do_parse!(
-    labels: many0!(terminated!(parse_label, char!(':'))) >>
-    name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
-    data: opt!(preceded!(
-        char!('='),
-        separated_nonempty_list!(comments_ws!(char!(',')), parse_data))) >>
-    char!(';') >>
-    (Property {deleted: false, name: name, val: data, labels: labels})
+named!(pub parse_prop<Property>, comments_ws!(alt!(
+    do_parse!(
+        tag!("/delete-property/") >>
+        name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
+        char!(';') >>
+        ( Property::Deleted(name) )
+    ) |
+    do_parse!(
+        labels: many0!(terminated!(parse_label, char!(':'))) >>
+        name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
+        data: opt!(preceded!(
+            char!('='),
+            separated_nonempty_list!(comments_ws!(char!(',')), parse_data))) >>
+        char!(';') >>
+        (Property::Existing { name: name, val: data, labels: labels })
+    )
 )));
 
-named!(parse_node<Node>, comments_ws!(do_parse!(
-    labels: many0!(terminated!(parse_label, char!(':'))) >>
-    name: map!(map_res!(alt!(
-        take_while1!(is_prop_node_char) |
-        tag!("/")
-    ), str::from_utf8), String::from) >>
-    char!('{') >>
-    props: many0!(parse_prop) >>
-    subnodes: many0!(parse_node) >>
-    char!('}') >>
-    char!(';') >>
-    (Node { name: name, deleted: false, proplist: props, children: subnodes, labels: labels })
+named!(parse_node<Node>, comments_ws!(alt!(
+    do_parse!(
+        tag!("/delete-node/") >>
+        name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
+        char!(';') >>
+        ( Node::Deleted(name) )
+    ) |
+    do_parse!(
+        labels: many0!(terminated!(parse_label, char!(':'))) >>
+        name: map!(map_res!(alt!(
+            take_while1!(is_prop_node_char) |
+            tag!("/")
+        ), str::from_utf8), String::from) >>
+        char!('{') >>
+        props: many0!(parse_prop) >>
+        subnodes: many0!(parse_node) >>
+        char!('}') >>
+        char!(';') >>
+        (Node::Existing { name: name, proplist: props, children: subnodes, labels: labels })
+    )
 )));
 
 named!(parse_ammend<Node>, comments_ws!(do_parse!(
@@ -618,7 +641,7 @@ named!(parse_ammend<Node>, comments_ws!(do_parse!(
     subnodes: many0!(parse_node) >>
     char!('}') >>
     char!(';') >>
-    (Node { name: name, deleted: false, proplist: props, children: subnodes, labels: labels })
+    (Node::Existing { name: name, proplist: props, children: subnodes, labels: labels })
 )));
 
 named!(parse_device_tree<Node>, comments_ws!(preceded!(peek!(char!('/')), parse_node)));
@@ -631,8 +654,6 @@ named!(parse_dts<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
     (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
 )));
 
-// TODO: delete nodes
-// TODO: delete props
 // TODO: error messages
 // TODO: track offsets
 pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
@@ -679,8 +700,7 @@ mod tests {
             parse_prop(b"empty_prop;"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "empty_prop".to_string(),
                     val: None,
                     labels: Vec::new(),
@@ -695,8 +715,7 @@ mod tests {
             parse_prop(b"cell_prop = < 1 2 10 >;"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "cell_prop".to_string(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
@@ -711,8 +730,7 @@ mod tests {
             parse_prop(b"string_prop = \"string\", \"string2\";"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "string_prop".to_string(),
                     val: Some(vec![
                             Data::String("string".to_string()),
@@ -730,8 +748,7 @@ mod tests {
             parse_prop(b"bytes_prop = [1234 56 78];"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "bytes_prop".to_string(),
                     val: Some(vec![Data::ByteArray(vec![0x12, 0x34, 0x56, 0x78])]),
                     labels: Vec::new(),
@@ -746,8 +763,7 @@ mod tests {
             parse_prop(b"mixed_prop = \"abc\", [1234], <0xa 0xb 0xc>;"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "mixed_prop".to_string(),
                     val: Some(vec![
                         Data::String("abc".to_string()),
@@ -766,8 +782,7 @@ mod tests {
             parse_prop(b"test_prop /**/ = < 1 2 10 >;"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "test_prop".to_string(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
@@ -782,8 +797,7 @@ mod tests {
             parse_prop(b"test_prop // stuff\n\t= < 1 2 10 >;"),
             IResult::Done(
                 &b""[..],
-                Property {
-                    deleted: false,
+                Property::Existing {
                     name: "test_prop".to_string(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
