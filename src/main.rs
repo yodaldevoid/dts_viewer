@@ -83,7 +83,8 @@ fn main() {
         Ok(dt) => {
             println!("{:#?}", dt);
             let (boot_info, ammends) = dt;
-            let store = create_alias_store(&boot_info, &ammends);
+            let mut store = LabelStore::new();
+            store.fill(&boot_info, &ammends);
             println!("{:#?}", store);
         },
         Err(err) => println!("{:?}", err),
