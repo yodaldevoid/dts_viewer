@@ -4,6 +4,7 @@ extern crate nom;
 mod inner_tree;
 mod cpp_parser;
 mod dts_parser;
+mod change_tracker;
 
 use std::env;
 use std::process::Command;
@@ -12,17 +13,7 @@ use std::fs::remove_file;
 
 use cpp_parser::*;
 use dts_parser::*;
-
-// Change tracking
-/*
-struct Change<'a> {
-    file: File,
-    line: usize,
-    // maybe point to node?
-    name: String,
-    value: Property<'a>,
-}
-*/
+use change_tracker::*;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
@@ -89,7 +80,12 @@ fn main() {
     println!("{}", String::from_utf8_lossy(&buffer));
 
     match parse_dt(&buffer) {
-        Ok(dt) => println!("{:#?}", dt),
+        Ok(dt) => {
+            println!("{:#?}", dt);
+            let (boot_info, ammends) = dt;
+            let store = create_alias_store(&boot_info, &ammends);
+            println!("{:#?}", store);
+        },
         Err(err) => println!("{:?}", err),
     }
 

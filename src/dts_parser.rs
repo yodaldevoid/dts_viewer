@@ -44,7 +44,7 @@ impl Labeled for ReserveInfo {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Node {
     Deleted(String),
     Existing {
@@ -77,7 +77,7 @@ impl Labeled for Node {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Property {
     Deleted(String),
     Existing {
@@ -101,7 +101,7 @@ impl Labeled for Property {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Data {
     Reference(String),
     String(String),
