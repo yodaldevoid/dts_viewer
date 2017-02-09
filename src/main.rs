@@ -1,8 +1,3 @@
-#![allow(dead_code)]
-
-extern crate libc;
-extern crate byteorder;
-
 #[macro_use]
 extern crate nom;
 
@@ -33,16 +28,19 @@ const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
 /*
  * General idea:
- *  -Run CPP
+ *  Run CPP
  *  Parse file for DTS includes and replace with include contents
  *  Find byte starts/ends for each file
- *  Parse file to create device tree and create hashmap of objects to byte offset starting points
+ *  Parse file to create device tree
+ *  TODO: create mapping of objects to byte offset starting points
+ *  create mapping of full paths to objects
+ *  create mapping of aliases/labels to full paths
  *  Parse device tree to create changes
- *  Use hashmap and file starts to pair changes to file byte offsets
- *  Turn file byte offsets to file lines/rows
- *  ???
- *  Profit!
- *  Oh, and somehow display the damn information
+ *  TODO: Use mapping and file starts to pair changes to file byte offsets
+ *  TODO: Turn file byte offsets to file lines/rows
+ *  TODO: ???
+ *  TODO: Profit!
+ *  TODO: Oh, and somehow display the damn information
  */
 fn main() {
     let file_name = match env::args().nth(1) {
@@ -94,6 +92,35 @@ fn main() {
         Ok(dt) => println!("{:#?}", dt),
         Err(err) => println!("{:?}", err),
     }
+
+    // TODO: perform secondary checks and jazz (only smooth)
+    /*
+        checkes to do: 
+            duplicate node names
+            duplicate property names
+            node name format (only one @)
+            unit addr vs reg/ranges property
+            duplicate labels -- handled by creation of alias store
+            duplicate explict phandles
+            name property does not match name
+            check if X is cell only
+                #address-cells
+                #size-cells
+                #interrupt-cells
+            check if X is string only
+                device_type
+                model
+                status
+            fixup addr size cells
+            check reg property format
+            check ranges property format
+            avoid default addr size?
+            obsolete chosen iterrupt controller
+
+        maybe:
+            fixup phandle refs
+            fixup path refs
+     */
 
     match remove_file(Path::new(CPP_OUTPUT_NAME)) {
         Ok(_) => {},

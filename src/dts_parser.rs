@@ -115,11 +115,10 @@ fn from_str_dec<T: FromStr>(s: &str) -> Result<T, T::Err> {
 
 // This is dumb and feels wrong, but it works so I will complain no more.
 // Thank you to Filipe Gonçalves and https://crates.io/crates/config for the inspiration.
-//
 named!(eat_junk,
        do_parse!(many0!(alt!(delimited!(tag!("/*"), take_until!("*/"), tag!("*/")) |
                              delimited!(tag!("//"), not_line_ending, line_ending) |
-                             do_parse!(// TODO: maybe actually parse the info. Or not.
+                             do_parse!( // TODO: maybe actually parse the info. Or not.
                                        tag!("#") >> opt!(tag!("line")) >> many1!(space) >>
                                        many1!(digit) >>
                                        many1!(space) >>
@@ -622,7 +621,6 @@ named!(parse_ammend<Node>, comments_ws!(do_parse!(
     (Node { name: name, deleted: false, proplist: props, children: subnodes, labels: labels })
 )));
 
-// TODO: stuff after main block
 named!(parse_device_tree<Node>, comments_ws!(preceded!(peek!(char!('/')), parse_node)));
 
 named!(parse_dts<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
@@ -633,20 +631,20 @@ named!(parse_dts<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
     (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
 )));
 
-// TODO: imports
 // TODO: delete nodes
 // TODO: delete props
 // TODO: error messages
+// TODO: track offsets
 pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
     match parse_dts(source) {
         IResult::Done(remaining, device_tree) => {
-            if remaining.len() > 0 {
+            if remaining.is_empty() {
+                Ok(device_tree)
+            } else {
                 Err(format!(
                     "Remaining input after completion: {}",
                     String::from_utf8_lossy(remaining)
                 ))
-            } else {
-                Ok(device_tree)
             }
         }
         IResult::Incomplete(_) => Err("Incomplete input".to_string()),
