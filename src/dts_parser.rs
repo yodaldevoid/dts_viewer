@@ -23,9 +23,9 @@ trait Labeled {
 
 #[derive(PartialEq, Debug)]
 pub struct BootInfo {
-    reserve_info: Vec<ReserveInfo>,
-    boot_cpuid: u32,
-    root: Node,
+    pub reserve_info: Vec<ReserveInfo>,
+    pub boot_cpuid: u32,
+    pub root: Node,
 }
 
 #[derive(PartialEq, Debug)]

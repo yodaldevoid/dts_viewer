@@ -49,8 +49,28 @@ impl<'a> LabelStore<'a> {
 
                 self.paths.entry(path.join(name))
                           .or_insert_with(Vec::new)
-                          .push(Element::Node(node)); 
-                // TODO: delete non-deleted children
+                          .push(Element::Node(node));
+
+                let paths: Vec<PathBuf> = self.paths.iter().filter_map(
+                    |(key, val)| if key.starts_with(&node_path) {
+                        match val.last() {
+                            Some(&Element::Node(&Node::Existing { .. })) => {
+                                Some(key.to_path_buf())
+                            }
+                            Some(&Element::Prop(&Property::Existing { .. })) => {
+                                Some(key.to_path_buf())
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    })
+                    .collect();
+
+                for path in &paths {
+                    self.delete_labels(path);
+                    self.paths.get_mut(path).unwrap().push(Element::Node(node));
+                }
             }
             Node::Existing { ref name, ref proplist, ref children, ref labels } => {
                 let node_path = path.join(name);
