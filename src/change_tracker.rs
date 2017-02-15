@@ -124,4 +124,12 @@ impl<'a> LabelStore<'a> {
             }
         }
     }
+
+    pub fn changes_from_path(&self, path: &Path) -> Option<&[Element<'a>]> {
+        self.paths.get(path).map(|v| v.as_slice())
+    }
+
+    pub fn path_from_label(&self, label: &str) -> Option<&Path> {
+        self.labels.get(label).map(|p| p.as_path())
+    }
 }

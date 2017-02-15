@@ -8,8 +8,9 @@ mod change_tracker;
 
 use std::env;
 use std::process::Command;
-use std::path::Path;
+use std::path::{ Path, PathBuf };
 use std::fs::remove_file;
+use std::io::{ self, BufRead, Write };
 
 use cpp_parser::*;
 use dts_parser::*;
@@ -77,15 +78,53 @@ fn main() {
         };
 
     println!("{}", root_file);
-    println!("{}", String::from_utf8_lossy(&buffer));
+    //println!("{}", String::from_utf8_lossy(&buffer));
 
     match parse_dt(&buffer) {
         Ok(dt) => {
-            println!("{:#?}", dt);
+            //println!("{:#?}", dt);
             let (boot_info, ammends) = dt;
             let mut store = LabelStore::new();
             store.fill(&boot_info, &ammends);
-            println!("{:#?}", store);
+
+            print!("Enter alias or path: ");
+            io::stdout().flush().expect("Error flushing stdout");
+
+            let mut line = String::new();
+            let stdin = io::stdin();
+            stdin.lock().read_line(&mut line).expect("Error reading from stdin");
+            let line = line.trim();
+
+            let path = if line.starts_with('/') {
+                Some(PathBuf::from(line))
+            } else {
+                match store.path_from_label(line) {
+                    Some(path) => {
+                        println!("Path: {:?}", path);
+                        Some(path.to_path_buf())
+                    }
+                    None => {
+                        println!("Label points to no path");
+                        None
+                    }
+                }
+            };
+
+            if let Some(path) = path {
+                match store.changes_from_path(&path) {
+                    Some(changes) => {
+                        for change in changes {
+                            println!("{}\n", change);
+                        }
+                    }
+                    None => println!("Nothing at path"),
+                }
+            }
+
+            // TODO:
+            // if label covers multiple paths (after saving old aliases is implemented)
+            //     ask user which one they want as well as why this is being asked
+            // show all changes along the way
         },
         Err(err) => println!("{:?}", err),
     }
