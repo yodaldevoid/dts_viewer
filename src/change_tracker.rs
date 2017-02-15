@@ -1,13 +1,7 @@
 use std::collections::HashMap;
 use std::path::{ Path, PathBuf };
 
-use dts_parser::{ BootInfo, Node, Property };
-
-#[derive(PartialEq, Eq, Hash, Debug)]
-enum Element<'a> {
-    Node(&'a Node),
-    Prop(&'a Property),
-}
+use dts_parser::{ BootInfo, Node, Property, Element };
 
 #[derive(Debug)]
 pub struct LabelStore<'a> {

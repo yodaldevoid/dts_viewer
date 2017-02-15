@@ -1,7 +1,9 @@
 use std::str::{self, FromStr};
+use std::num::ParseIntError;
+use std::collections::HashMap;
+
 use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alpha, line_ending,
           not_line_ending, multispace, space};
-use std::num::ParseIntError;
 
 // Copied and modified from rust-lang/rust/src/libcore/num/mod.rs
 trait FromStrRadix: PartialOrd + Copy {
@@ -42,6 +44,12 @@ impl Labeled for ReserveInfo {
             self.labels.push(label);
         }
     }
+}
+
+#[derive(PartialEq, Eq, Hash, Debug)]
+pub enum Element<'a> {
+    Node(&'a Node),
+    Prop(&'a Property),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
