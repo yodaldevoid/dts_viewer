@@ -1,6 +1,7 @@
 use std::str::{self, FromStr};
 use std::num::ParseIntError;
 use std::collections::HashMap;
+use std::fmt;
 
 use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alpha, line_ending,
           not_line_ending, multispace, space};
@@ -52,6 +53,15 @@ pub enum Element<'a> {
     Prop(&'a Property),
 }
 
+impl<'a> fmt::Display for Element<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Element::Node(ref node) => write!(f, "{}", node),
+            Element::Prop(ref prop) => write!(f, "{}", prop),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Node {
     Deleted(String),
@@ -85,6 +95,32 @@ impl Labeled for Node {
     }
 }
 
+impl fmt::Display for Node {
+    // TODO: labels
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Node::Deleted(ref name) => write!(f, "// Node {} deleted", name)?,
+            Node::Existing { ref name, ref proplist, ref children, .. } => {
+                writeln!(f, "{} {{", name)?;
+                for prop in proplist {
+                    writeln!(f, "    {}", prop)?;
+                }
+                for node in children {
+                    match *node {
+                        Node::Deleted(ref name) =>
+                            writeln!(f, "    // Node {} deleted", name)?,
+                        Node::Existing { ref name, .. } =>
+                            writeln!(f, "    {} {{ ... }}", name)?
+                    }
+                }
+                write!(f, "}}")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Property {
     Deleted(String),
@@ -109,12 +145,79 @@ impl Labeled for Property {
     }
 }
 
+impl fmt::Display for Property {
+    // TODO: labels
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Property::Deleted(ref name) => write!(f, "// Property {} deleted", name)?,
+            Property::Existing { ref name, ref val, .. } => {
+                write!(f, "{}", name)?;
+                if let Some(ref data) = *val {
+                    if !data.is_empty() {
+                        let mut iter = data.iter();
+                        write!(f, " = {}", iter.next().unwrap())?;
+                        for d in iter {
+                            write!(f, ", {}", d)?;
+                        }
+                    }
+                }
+                write!(f, ";")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Data {
     Reference(String),
     String(String),
     Cells(usize, Vec<(u64, Option<String>)>),
     ByteArray(Vec<u8>),
+}
+
+impl fmt::Display for Data {
+    // TODO: labels
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Data::Reference(ref r) => write!(f, "&{}", r)?,
+            Data::String(ref s) => write!(f, "{}", s)?,
+            Data::Cells(bits, ref cells) => {
+                if bits != 32 {
+                    write!(f, "/bits/ {}", bits)?;
+                }
+                write!(f, "<")?;
+                if !cells.is_empty() {
+                    let mut iter = cells.iter();
+                    match *iter.next().unwrap() {
+                        (_, Some(ref s)) => write!(f, "&{}", s)?,
+                        (i, None) => write!(f, "{}", i)?,
+                    }
+                    for d in iter {
+                        match *d {
+                            (_, Some(ref s)) => write!(f, ", &{}", s)?,
+                            (i, None) => write!(f, ", {}", i)?,
+                        }
+                    }
+                }
+                write!(f, ">")?;
+            }
+            Data::ByteArray(ref arr) => {
+                write!(f, "[ ")?;
+                if !arr.is_empty() {
+                    let mut iter = arr.iter();
+                    write!(f, "{:02X}", iter.next().unwrap())?;
+                    for d in iter{
+                        write!(f, " {:02X}", d)?;
+                    }
+                }
+                write!(f, " ]")?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn from_str_hex<T: FromStrRadix>(s: &str) -> Result<T, T::Err> {
