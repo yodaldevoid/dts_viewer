@@ -196,9 +196,12 @@ impl ParsedFile {
     fn write(&self, f: &mut Formatter, prefix: &str) -> fmt::Result {
         let mut next_prefix = prefix.to_string();
         next_prefix.push_str(" |-");
-        writeln!(f, "{} {:?}: {}", prefix, self.path, self.method).and(self.included_files
-            .iter()
-            .fold(Ok(()), |res, x| res.and(x.write(f, &next_prefix))))
+        writeln!(f, "{} {:?}: {}", prefix, self.path, self.method)?;
+        for file in &self.included_files {
+            file.write(f, &next_prefix)?;
+		}
+
+		Ok(())
     }
 }
 
