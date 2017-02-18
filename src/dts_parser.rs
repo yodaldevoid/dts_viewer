@@ -1,10 +1,9 @@
 use std::str::{self, FromStr};
 use std::num::ParseIntError;
-use std::collections::HashMap;
 use std::fmt;
 
 use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alpha, line_ending,
-          not_line_ending, multispace, space};
+          not_line_ending, multispace, space, rest};
 
 // Copied and modified from rust-lang/rust/src/libcore/num/mod.rs
 trait FromStrRadix: PartialOrd + Copy {
@@ -24,14 +23,18 @@ trait Labeled {
     fn add_label(&mut self, label: &str);
 }
 
-#[derive(PartialEq, Debug)]
+pub trait Offset {
+    fn get_offset(&self) -> usize;
+}
+
+#[derive(Debug)]
 pub struct BootInfo {
     pub reserve_info: Vec<ReserveInfo>,
     pub boot_cpuid: u32,
     pub root: Node,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct ReserveInfo {
     address: u64,
     size: u64,
@@ -47,24 +50,36 @@ impl Labeled for ReserveInfo {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(Debug)]
 pub enum Element<'a> {
     Node(&'a Node),
     Prop(&'a Property),
 }
 
-impl<'a> fmt::Display for Element<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl<'a> Offset for Element<'a> {
+    fn get_offset(&self) -> usize {
         match *self {
-            Element::Node(ref node) => write!(f, "{}", node),
-            Element::Prop(ref prop) => write!(f, "{}", prop),
+            Element::Node(n) => n.get_offset(),
+            Element::Prop(p) => p.get_offset(),
         }
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+impl<'a> fmt::Display for Element<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Element::Node(node) => write!(f, "{}", node),
+            Element::Prop(prop) => write!(f, "{}", prop),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
 pub enum Node {
-    Deleted(String),
+    Deleted {
+        name: String,
+        offset: usize,
+    },
     Existing {
         name: String,
         proplist: Vec<Property>,
@@ -78,13 +93,15 @@ pub enum Node {
         // addr_cells: i32,
         // size_cells: i32,
         labels: Vec<String>,
+
+        offset: usize,
     }
 }
 
 impl Labeled for Node {
     fn add_label(&mut self, label: &str) {
         match *self {
-            Node::Deleted(_) => panic!("Why are you adding a label to a deleted node?!"),
+            Node::Deleted { .. } => panic!("Why are you adding a label to a deleted node?!"),
             Node::Existing{ ref mut labels, .. } => {
                 let label = label.to_string();
                 if labels.contains(&label) {
@@ -95,11 +112,19 @@ impl Labeled for Node {
     }
 }
 
+impl Offset for Node {
+    fn get_offset(&self) -> usize {
+        match *self {
+            Node::Deleted { offset, .. } | Node::Existing { offset, .. } => offset,
+        }
+    }
+}
+
 impl fmt::Display for Node {
     // TODO: labels
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Node::Deleted(ref name) => write!(f, "// Node {} deleted", name)?,
+            Node::Deleted { ref name, .. } => write!(f, "// Node {} deleted", name)?,
             Node::Existing { ref name, ref proplist, ref children, .. } => {
                 writeln!(f, "{} {{", name)?;
                 for prop in proplist {
@@ -107,7 +132,7 @@ impl fmt::Display for Node {
                 }
                 for node in children {
                     match *node {
-                        Node::Deleted(ref name) =>
+                        Node::Deleted { ref name, .. } =>
                             writeln!(f, "    // Node {} deleted", name)?,
                         Node::Existing { ref name, .. } =>
                             writeln!(f, "    {} {{ ... }}", name)?
@@ -121,20 +146,24 @@ impl fmt::Display for Node {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Property {
-    Deleted(String),
+    Deleted {
+        name: String,
+        offset: usize,
+    },
     Existing {
         name: String,
         val: Option<Vec<Data>>,
         labels: Vec<String>,
+        offset: usize,
     }
 }
 
 impl Labeled for Property {
     fn add_label(&mut self, label: &str) {
         match *self {
-            Property::Deleted(_) => panic!("Why are you adding a label to a deleted property?!"),
+            Property::Deleted { .. } => panic!("Why are you adding a label to a deleted property?!"),
             Property::Existing{ ref mut labels, .. } => {
                 let label = label.to_string();
                 if labels.contains(&label) {
@@ -145,11 +174,19 @@ impl Labeled for Property {
     }
 }
 
+impl Offset for Property {
+    fn get_offset(&self) -> usize {
+        match *self {
+            Property::Deleted { offset, .. } | Property::Existing { offset, .. } => offset,
+        }
+    }
+}
+
 impl fmt::Display for Property {
     // TODO: labels
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Property::Deleted(ref name) => write!(f, "// Property {} deleted", name)?,
+            Property::Deleted { ref name, .. } => write!(f, "// Property {} deleted", name)?,
             Property::Existing { ref name, ref val, .. } => {
                 write!(f, "{}", name)?;
                 if let Some(ref data) = *val {
@@ -169,7 +206,7 @@ impl fmt::Display for Property {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Data {
     Reference(String),
     String(String),
@@ -701,74 +738,91 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
     do_parse!(val: parse_ref >> (Data::Reference(val)))
 )));
 
-named!(pub parse_prop<Property>, comments_ws!(alt!(
+named_args!(pub parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
     do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         tag!("/delete-property/") >>
         name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
         char!(';') >>
-        ( Property::Deleted(name) )
+        ( Property::Deleted { name: name, offset: input_len - offset } )
     ) |
     do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         labels: many0!(terminated!(parse_label, char!(':'))) >>
         name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
         data: opt!(preceded!(
             char!('='),
             separated_nonempty_list!(comments_ws!(char!(',')), parse_data))) >>
         char!(';') >>
-        (Property::Existing { name: name, val: data, labels: labels })
+        ( Property::Existing { name: name,
+                               val: data,
+                               labels: labels,
+                               offset: input_len - offset } )
     )
 )));
 
-named!(parse_node<Node>, comments_ws!(alt!(
+named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
     do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         tag!("/delete-node/") >>
         name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
         char!(';') >>
-        ( Node::Deleted(name) )
+        ( Node::Deleted { name: name, offset: input_len - offset } )
     ) |
     do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         labels: many0!(terminated!(parse_label, char!(':'))) >>
         name: map!(map_res!(alt!(
             take_while1!(is_prop_node_char) |
             tag!("/")
         ), str::from_utf8), String::from) >>
         char!('{') >>
-        props: many0!(parse_prop) >>
-        subnodes: many0!(parse_node) >>
+        props: many0!(apply!(parse_prop, input_len)) >>
+        subnodes: many0!(apply!(parse_node, input_len)) >>
         char!('}') >>
         char!(';') >>
-        (Node::Existing { name: name, proplist: props, children: subnodes, labels: labels })
+        ( Node::Existing { name: name,
+                           proplist: props,
+                           children: subnodes,
+                           labels: labels,
+                           offset: input_len - offset } )
     )
 )));
 
-named!(parse_ammend<Node>, comments_ws!(do_parse!(
+named_args!(parse_ammend(input_len: usize)<Node>, comments_ws!(do_parse!(
+    offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
     labels: many0!(terminated!(parse_label, char!(':'))) >>
     name: alt!(
         map!(map_res!(tag!("/"), str::from_utf8), String::from) |
         call!(parse_ref)
     ) >>
     char!('{') >>
-    props: many0!(parse_prop) >>
-    subnodes: many0!(parse_node) >>
+    props: many0!(apply!(parse_prop, input_len)) >>
+    subnodes: many0!(apply!(parse_node, input_len)) >>
     char!('}') >>
     char!(';') >>
-    (Node::Existing { name: name, proplist: props, children: subnodes, labels: labels })
+    ( Node::Existing { name: name,
+                       proplist: props,
+                       children: subnodes,
+                       labels: labels,
+                       offset: input_len - offset } )
 )));
 
-named!(parse_device_tree<Node>, comments_ws!(preceded!(peek!(char!('/')), parse_node)));
+named_args!(parse_device_tree(input_len: usize)<Node>,
+            comments_ws!(preceded!(peek!(char!('/')), apply!(parse_node, input_len))));
 
-named!(parse_dts<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
+named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
     tag!("/dts-v1/;") >>
     mem_reserves: many0!(parse_mem_reserve) >>
-    device_tree: parse_device_tree >>
-    ammendments: many0!(parse_ammend) >>
+    device_tree: apply!(parse_device_tree, input_len) >>
+    ammendments: many0!(apply!(parse_ammend, input_len)) >>
     (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
 )));
 
 // TODO: error messages
 // TODO: track offsets
 pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
-    match parse_dts(source) {
+    match parse_dts(source, source.len()) {
         IResult::Done(remaining, device_tree) => {
             if remaining.is_empty() {
                 Ok(device_tree)
@@ -781,7 +835,6 @@ pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
         }
         IResult::Incomplete(_) => Err("Incomplete input".to_string()),
         IResult::Error(err) => {
-            // println!("{:?}", );
             Err(format!("Error during parsing: {:?}", err))
         }
     }
@@ -807,14 +860,16 @@ mod tests {
 
     #[test]
     fn parse_prop_empty() {
+        let input = b"empty_prop;";
         assert_eq!(
-            parse_prop(b"empty_prop;"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
                     name: "empty_prop".to_string(),
                     val: None,
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );
@@ -822,14 +877,16 @@ mod tests {
 
     #[test]
     fn parse_prop_cells() {
+        let input = b"cell_prop = < 1 2 10 >;";
         assert_eq!(
-            parse_prop(b"cell_prop = < 1 2 10 >;"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
                     name: "cell_prop".to_string(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );
@@ -837,8 +894,9 @@ mod tests {
 
     #[test]
     fn parse_prop_strings() {
+        let input = b"string_prop = \"string\", \"string2\";";
         assert_eq!(
-            parse_prop(b"string_prop = \"string\", \"string2\";"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
@@ -848,6 +906,7 @@ mod tests {
                             Data::String("string2".to_string())
                          ]),
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );
@@ -855,14 +914,16 @@ mod tests {
 
     #[test]
     fn parse_prop_bytes() {
+        let input = b"bytes_prop = [1234 56 78];";
         assert_eq!(
-            parse_prop(b"bytes_prop = [1234 56 78];"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
                     name: "bytes_prop".to_string(),
                     val: Some(vec![Data::ByteArray(vec![0x12, 0x34, 0x56, 0x78])]),
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );
@@ -870,8 +931,9 @@ mod tests {
 
     #[test]
     fn parse_prop_mixed() {
+        let input = b"mixed_prop = \"abc\", [1234], <0xa 0xb 0xc>;";
         assert_eq!(
-            parse_prop(b"mixed_prop = \"abc\", [1234], <0xa 0xb 0xc>;"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
@@ -882,6 +944,7 @@ mod tests {
                         Data::Cells(32, vec![(0xa, None), (0xb, None), (0xc, None)])
                     ]),
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );
@@ -889,14 +952,16 @@ mod tests {
 
     #[test]
     fn block_comment() {
+        let input = b"test_prop /**/ = < 1 2 10 >;";
         assert_eq!(
-            parse_prop(b"test_prop /**/ = < 1 2 10 >;"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
                     name: "test_prop".to_string(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );
@@ -904,14 +969,16 @@ mod tests {
 
     #[test]
     fn line_comment() {
+        let input = b"test_prop // stuff\n\t= < 1 2 10 >;";
         assert_eq!(
-            parse_prop(b"test_prop // stuff\n\t= < 1 2 10 >;"),
+            parse_prop(input, input.len()),
             IResult::Done(
                 &b""[..],
                 Property::Existing {
                     name: "test_prop".to_string(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
+                    offset: 0,
                 }
             )
         );

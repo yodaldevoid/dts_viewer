@@ -30,14 +30,14 @@ impl<'a> LabelStore<'a> {
                         unimplemented!();
                     }
                 }
-                Node::Deleted(_) => unreachable!(),
+                Node::Deleted { .. } => unreachable!(),
             }
         }
     }
 
     fn fill_internal(&mut self, path: &Path, node: &'a Node) {
         match *node {
-            Node::Deleted(ref name) => {
+            Node::Deleted { ref name, .. } => {
                 let node_path = path.join(name);
                 self.delete_labels(&node_path);
 
@@ -48,9 +48,7 @@ impl<'a> LabelStore<'a> {
                 let paths: Vec<PathBuf> = self.paths.iter().filter_map(
                     |(key, val)| if key.starts_with(&node_path) {
                         match val.last() {
-                            Some(&Element::Node(&Node::Existing { .. })) => {
-                                Some(key.to_path_buf())
-                            }
+                            Some(&Element::Node(&Node::Existing { .. })) |
                             Some(&Element::Prop(&Property::Existing { .. })) => {
                                 Some(key.to_path_buf())
                             }
@@ -66,13 +64,13 @@ impl<'a> LabelStore<'a> {
                     self.paths.get_mut(path).unwrap().push(Element::Node(node));
                 }
             }
-            Node::Existing { ref name, ref proplist, ref children, ref labels } => {
+            Node::Existing { ref name, ref proplist, ref children, ref labels, .. } => {
                 let node_path = path.join(name);
                 self.insert_labels(&node_path, labels);
 
                 for prop in proplist {
                     match *prop {
-                        Property::Deleted(ref name) => {
+                        Property::Deleted { ref name, .. } => {
                             let label_path = node_path.join(name);
                             self.delete_labels(&label_path);
 

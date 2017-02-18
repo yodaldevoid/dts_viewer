@@ -24,9 +24,10 @@ const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
  *  Parse file for DTS includes and replace with include contents
  *  Find byte starts/ends for each file
  *  Parse file to create device tree
- *  TODO: create mapping of objects to byte offset starting points
+ *  create mapping of objects to byte offset starting points
+    - not perfect with offsets stored in object, but it will do
  *  create mapping of full paths to objects
- *  create mapping of aliases/labels to full paths
+ *  create mapping of labels to full paths
  *  Parse device tree to create changes
  *  TODO: Use mapping and file starts to pair changes to file byte offsets
  *  TODO: Turn file byte offsets to file lines/rows
@@ -87,37 +88,43 @@ fn main() {
             let mut store = LabelStore::new();
             store.fill(&boot_info, &ammends);
 
-            print!("Enter alias or path: ");
-            io::stdout().flush().expect("Error flushing stdout");
+            loop {
+                print!("Enter alias or path: ");
+                io::stdout().flush().expect("Error flushing stdout");
 
-            let mut line = String::new();
-            let stdin = io::stdin();
-            stdin.lock().read_line(&mut line).expect("Error reading from stdin");
-            let line = line.trim();
+                let mut line = String::new();
+                let stdin = io::stdin();
+                stdin.lock().read_line(&mut line).expect("Error reading from stdin");
+                let line = line.trim();
 
-            let path = if line.starts_with('/') {
-                Some(PathBuf::from(line))
-            } else {
-                match store.path_from_label(line) {
-                    Some(path) => {
-                        println!("Path: {:?}", path);
-                        Some(path.to_path_buf())
-                    }
-                    None => {
-                        println!("Label points to no path");
-                        None
-                    }
+                if line.is_empty() {
+                    break;
                 }
-            };
 
-            if let Some(path) = path {
-                match store.changes_from_path(&path) {
-                    Some(changes) => {
-                        for change in changes {
-                            println!("{}\n", change);
+                let path = if line.starts_with('/') {
+                    Some(PathBuf::from(line))
+                } else {
+                    match store.path_from_label(line) {
+                        Some(path) => {
+                            println!("Path: {:?}", path);
+                            Some(path.to_path_buf())
+                        }
+                        None => {
+                            println!("Label points to no path");
+                            None
                         }
                     }
-                    None => println!("Nothing at path"),
+                };
+
+                if let Some(path) = path {
+                    match store.changes_from_path(&path) {
+                        Some(changes) => {
+                            for change in changes {
+                                println!("Start offset: {}\n{}\n", change.get_offset(), change);
+                            }
+                        }
+                        None => println!("Nothing at path"),
+                    }
                 }
             }
 
