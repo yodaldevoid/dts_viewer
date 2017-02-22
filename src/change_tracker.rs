@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{ Path, PathBuf };
 
-use dts_parser::{ BootInfo, Node, Property, Element };
+use dts_parser::{ BootInfo, Node, NodeName, Property, Element };
 
 #[derive(Debug)]
 pub struct LabelStore<'a> {
@@ -21,11 +21,11 @@ impl<'a> LabelStore<'a> {
         for node in ammends {
             match *node {
                 Node::Existing { ref name, .. } => {
-                    if name == "/" {
-                        self.fill_internal(Path::new("/"), node);
-                    } else if self.labels.contains_key(name.as_str()) {
-                        let path = self.labels[name.as_str()].clone();
-                        self.fill_internal(&path, node);
+                    if name.to_str() == "/" {
+                        self.fill_internal(Path::new(""), node);
+                    } else if self.labels.contains_key(name.to_str()) {
+                        let path = self.labels[name.to_str()].clone();
+                        self.fill_internal(path.parent().unwrap(), node);
                     } else {
                         unimplemented!();
                     }
@@ -65,7 +65,13 @@ impl<'a> LabelStore<'a> {
                 }
             }
             Node::Existing { ref name, ref proplist, ref children, ref labels, .. } => {
-                let node_path = path.join(name);
+                let node_path = match *name {
+                    NodeName::Full(ref name) => path.join(name),
+                    NodeName::Label(ref label) => {
+                        self.path_from_label(label).unwrap().to_path_buf()
+                    }
+                };
+
                 self.insert_labels(&node_path, labels);
 
                 for prop in proplist {

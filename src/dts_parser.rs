@@ -81,7 +81,7 @@ pub enum Node {
         offset: usize,
     },
     Existing {
-        name: String,
+        name: NodeName,
         proplist: Vec<Property>,
         children: Vec<Node>,
 
@@ -143,6 +143,28 @@ impl fmt::Display for Node {
         }
 
         Ok(())
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum NodeName {
+    Label(String),
+    Full(String)
+}
+
+impl fmt::Display for NodeName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            NodeName::Label(ref name) | NodeName::Full(ref name) => write!(f, "{}", name),
+        }
+    }
+}
+
+impl NodeName {
+    pub fn to_str(&self) -> &str {
+        match *self {
+            NodeName::Label(ref name) | NodeName::Full(ref name) => name,
+        }
     }
 }
 
@@ -797,7 +819,7 @@ named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
         subnodes: many0!(apply!(parse_node, input_len)) >>
         char!('}') >>
         char!(';') >>
-        ( Node::Existing { name: name,
+        ( Node::Existing { name: NodeName::Full(name),
                            proplist: props,
                            children: subnodes,
                            labels: labels,
@@ -809,8 +831,8 @@ named_args!(parse_ammend(input_len: usize)<Node>, comments_ws!(do_parse!(
     offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
     labels: many0!(terminated!(parse_label, char!(':'))) >>
     name: alt!(
-        map!(map_res!(tag!("/"), str::from_utf8), String::from) |
-        call!(parse_ref)
+        map!(map!(map_res!(tag!("/"), str::from_utf8), String::from), |x| NodeName::Full(x)) |
+        map!(call!(parse_ref), |x| NodeName::Label(x))
     ) >>
     char!('{') >>
     props: many0!(apply!(parse_prop, input_len)) >>
