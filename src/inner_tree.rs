@@ -161,11 +161,10 @@ impl ParsedFile {
                         // parent_start -- start -- end -- parent_end
                         remainders.push(FileMapping {
                             parent_start: end,
-                            // TODO: this aint right
                             child_start: map.child_start + start - map.parent_start + offset,
                             len: remainder - offset,
                         });
-                    } //TODO: check for split across two includes
+                    }
 
                     map.len = start - map.parent_start;
                 } else if map.parent_start == start {

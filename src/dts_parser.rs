@@ -856,18 +856,18 @@ pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
     }
 }
 
-// TODO: try not to eat whitespace past thing
-named!(pub parse_include<String>, ws!(preceded!(
+named!(pub parse_include<String>, preceded!(
     tag!("/include/"),
-    delimited!(
-        char!('"'),
-        do_parse!(
-            val: escape_c_string >>
-            (val)
-        ),
-        char!('"')
-    )
-)));
+    preceded!( multispace,
+        delimited!(
+            char!('"'),
+            do_parse!(
+                val: escape_c_string >>
+                (val)
+            ),
+            char!('"')
+        ))
+));
 
 #[cfg(test)]
 mod tests {
