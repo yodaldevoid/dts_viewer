@@ -542,6 +542,23 @@ pub fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                         }
                     }
 
+                    b';' => {
+                        match stack.pop() {
+                            Some(Token::Number(a)) => {
+                                if stack.is_empty() {
+                                    return IResult::Done(buf, a);
+                                } else {
+                                    return IResult::Error(
+                                        error_position!(ErrorKind::Custom(1), buf)
+                                    );
+                                }
+                            }
+                            _ => return IResult::Error(
+                                    error_position!(ErrorKind::Custom(1), buf)
+                                ),
+                        }
+                    }
+
                     x => {
                         println!("Unimplemented char: {}", x as char);
                         return IResult::Error(error_position!(ErrorKind::Custom(1), buf));
@@ -582,8 +599,7 @@ named!(pub integer<u64>, alt_complete!(
         (if a != 0 { b } else { c })
     )) |
 */
-    complete!(preceded!(
-        tag_no_case!("0x"),
+    complete!(preceded!(tag_no_case!("0x"),
         map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) |
     preceded!(tag_no_case!("0"),
         map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
