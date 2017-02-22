@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::str::Lines;
-use std::io::prelude::*;
-use std::io::BufReader;
+use std::io::{ Read, BufRead, BufReader };
 use std::iter::Peekable;
 
 use nom::IResult;
@@ -16,19 +15,6 @@ pub enum LinemarkerFlag {
     Return,
     System,
     Extern,
-}
-
-fn count_begining_chars(s: &str, c: char) -> usize {
-    let mut count: usize = 0;
-    for sc in s.chars() {
-        if sc == c {
-            count += 1;
-        } else {
-            break;
-        }
-    }
-
-    count
 }
 
 pub fn parse_cpp_outputs<'a>(cpp_stderr: &'a str,
@@ -47,7 +33,16 @@ pub fn parse_cpp_outputs<'a>(cpp_stderr: &'a str,
 // parse stderr to get the include tree
 fn parse_cpp_stderr(lines: &mut Peekable<Lines>, parent_file: &mut ParsedFile, depth: usize) {
     while let Some(line) = lines.peek().cloned() {
-        let count = count_begining_chars(line, '.');
+
+        let mut count: usize = 0;
+        for sc in line.chars() {
+            if sc == '.' {
+                count += 1;
+            } else {
+                break;
+            }
+        }
+        let count = count;
 
         if count == 0 || count < depth || count == depth {
             return;
@@ -127,8 +122,7 @@ fn parse_cpp_linemarkers<'a>(current: &'a Option<(usize, usize, PathBuf, Option<
                                                          .filter_map(|e| e.ok()),
                                                      c_child_num)?,
                              len: line_to_byte_offset(File::open(cpp_output)
-                                                          .expect(&format!("File not found: \
-                                                                            {}",
+                                                          .expect(&format!("File not found: {}",
                                                                            cpp_output.to_str()
                                                                                .unwrap()))
                                                           .bytes()
@@ -230,35 +224,4 @@ fn include_dts_files(file: &Path,
             return Ok(buffer);
         };
     }
-}
-
-pub fn line_to_byte_offset<I: Iterator<Item = u8>>(bytes: I, line: usize) -> Result<usize, String> {
-    if line == 1 {
-        Ok(0)
-    } else {
-        bytes.enumerate()
-            .filter(|&(_, byte)| byte == b'\n')
-            .nth(line - 2)
-            .map(|(offset, _)| offset)
-            .ok_or_else(|| "Failed converting from line to byte offset".to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lines_to_bytes() {
-        let string = "Howdy\nHow goes it\nI'm doing fine\n";
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 1).unwrap(),
-                   0);
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 2).unwrap(),
-                   5);
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 3).unwrap(),
-                   17);
-    }
-
-    #[test]
-    fn bytes_to_lines() {}
 }

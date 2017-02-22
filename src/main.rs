@@ -12,9 +12,9 @@ use std::path::{ Path, PathBuf };
 use std::fs::remove_file;
 use std::io::{ self, BufRead, Write };
 
-use cpp_parser::*;
-use dts_parser::*;
-use change_tracker::*;
+use cpp_parser::parse_cpp_outputs;
+use dts_parser::{ Offset, parse_dt };
+use change_tracker::LabelStore;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
@@ -30,7 +30,7 @@ const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
  *  create mapping of labels to full paths
  *  Parse device tree to create changes
  *  TODO: Use mapping and file starts to pair changes to file byte offsets
- *  TODO: Turn file byte offsets to file lines/rows
+ *  Turn file byte offsets to file lines/cols
  *  TODO: ???
  *  TODO: Profit!
  *  TODO: Oh, and somehow display the damn information
@@ -120,7 +120,22 @@ fn main() {
                     match store.changes_from_path(&path) {
                         Some(changes) => {
                             for change in changes {
-                                println!("Start offset: {}\n{}\n", change.get_offset(), change);
+                                let offset = change.get_offset();
+                                println!("Start offset: {}", offset);
+
+                                match root_file.file_from_offset(offset) {
+                                    Ok(file) => {
+                                        print!("Include file: {:?}", file.path);
+
+                                        match root_file.file_line_from_global(Path::new(CPP_OUTPUT_NAME), offset) {
+                                            Ok((line, col)) => 
+                                                println!(", Line: {}, Column: {}", line, col),
+                                            Err(err) => println!("{}", err),
+                                        }
+                                    }
+                                    Err(err) => println!("{}", err),
+                                }
+                                println!("{}\n", change);
                             }
                         }
                         None => println!("Nothing at path"),

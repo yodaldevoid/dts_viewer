@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::fmt::{self, Display, Formatter};
 use std::cmp::Ordering;
+use std::fs::File;
+use std::io::Read;
 
 #[derive(Debug)]
 pub struct ParsedFile {
@@ -37,10 +39,6 @@ impl Ord for FileMapping {
 
 impl FileMapping {
     pub fn parent_end(&self) -> usize {
-        self.parent_start + self.len
-    }
-
-    pub fn child_end(&self) -> usize {
         self.parent_start + self.len
     }
 }
@@ -113,6 +111,69 @@ impl ParsedFile {
         Ok((start, end))
     }
 
+    pub fn file_line_from_global(&self, global_file: &Path, global: usize)
+                                   -> Result<(usize, usize), String> {
+        let file = self.file_from_offset(global)?;
+        for mapping in &file.mappings {
+            if global >= mapping.parent_start && global < mapping.parent_end() {
+                match file.method {
+                    IncludeMethod::DTS => {
+                        return Ok(byte_offset_to_line_col(
+                            File::open(&file.path)
+                                .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
+                                .bytes()
+                                .filter_map(|e| e.ok()),
+                            global - mapping.parent_start + mapping.child_start));
+                    }
+                    IncludeMethod::CPP => {
+                        let (g_line, g_col) = byte_offset_to_line_col(
+                            File::open(global_file)
+                                .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
+                                .bytes()
+                                .filter_map(|e| e.ok()),
+                            global);
+                        let (s_line, s_col) = byte_offset_to_line_col(
+                            File::open(global_file)
+                                .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
+                                .bytes()
+                                .filter_map(|e| e.ok()),
+                            mapping.parent_start);
+                        let (c_line, c_col) = byte_offset_to_line_col(
+                            File::open(&file.path)
+                                .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
+                                .bytes()
+                                .filter_map(|e| e.ok()),
+                            mapping.child_start);
+
+                        let line = g_line - s_line + c_line;
+                        let col = g_col - s_col + c_col;
+
+                        return Ok((line, col))
+                    }
+                }
+            }
+        }
+
+        Err("Failed to find mapping from global offset to file offset".to_string())
+    }    
+
+    pub fn file_from_offset(&self, offset: usize) -> Result<&ParsedFile, String> {
+        if !self.mappings.is_empty() &&
+           self.mappings
+            .iter()
+            .any(|m| offset >= m.parent_start && offset < m.parent_start + m.len) {
+            return Ok(self);
+        }
+
+        for f in &self.included_files {
+            if let Ok(f) = f.file_from_offset(offset) {
+                return Ok(f);
+            }
+        }
+
+        Err(format!("Byte offset is not within parsed files: {}", offset))
+    }
+
     pub fn file_from_offset_mut(&mut self, offset: usize) -> Result<&mut ParsedFile, String> {
         if !self.mappings.is_empty() &&
            self.mappings
@@ -171,12 +232,8 @@ impl ParsedFile {
                     // split is at begining of the mapping
                     // offset the start
                     {
-                        let offset = end as isize - start as isize;
-                        if offset.is_positive() {
-                            map.parent_start += offset as usize;
-                        } else {
-                            map.parent_start -= offset.abs() as usize;
-                        }
+                        let offset = end - start;
+                        map.parent_start += offset;
                     }
                     // shrink the len by the offset
                     map.len -= offset;
@@ -216,5 +273,57 @@ impl Display for IncludeMethod {
             IncludeMethod::DTS => write!(f, "DTS"),
             IncludeMethod::CPP => write!(f, "CPP"),
         }
+    }
+}
+
+pub fn line_to_byte_offset<I: Iterator<Item = u8>>(bytes: I, line: usize) -> Result<usize, String> {
+    if line == 1 {
+        Ok(0)
+    } else {
+        bytes.enumerate()
+            .filter(|&(_, byte)| byte == b'\n')
+            .nth(line - 2)
+            .map(|(offset, _)| offset)
+            .ok_or_else(|| "Failed converting from line to byte offset".to_string())
+    }
+}
+
+pub fn byte_offset_to_line_col<I: Iterator<Item = u8>>(bytes: I, offset: usize) -> (usize, usize) {
+    let opt = bytes.enumerate()
+        .filter(|&(off, byte)| off <= offset && byte == b'\n')
+        .map(|(start, _)| start)
+        .enumerate()
+        .last();
+
+    match opt {
+        Some((line, start)) => (line + 2, offset - start),
+        None => (1, offset + 1),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lines_to_bytes() {
+        let string = "Howdy\nHow goes it\nI'm doing fine\n";
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 1).unwrap(),
+                   0);
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 2).unwrap(),
+                   5);
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 3).unwrap(),
+                   17);
+    }
+
+    #[test]
+    fn bytes_to_lines() {
+        let string = "Howdy\nHow goes it\nI'm doing fine\n";
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter().map(|b| *b), 0),
+                   (1, 1));
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter().map(|b| *b), 8),
+                   (2, 3));
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter().map(|b| *b), 20),
+                   (3, 3));
     }
 }
