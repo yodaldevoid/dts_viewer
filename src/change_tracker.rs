@@ -21,11 +21,8 @@ impl<'a> LabelStore<'a> {
         for node in ammends {
             match *node {
                 Node::Existing { ref name, .. } => {
-                    if name.to_str() == "/" {
+                    if name.to_str() == "/" || self.labels.contains_key(name.to_str()) {
                         self.fill_internal(Path::new(""), node);
-                    } else if self.labels.contains_key(name.to_str()) {
-                        let path = self.labels[name.to_str()].clone();
-                        self.fill_internal(path.parent().unwrap(), node);
                     } else {
                         unimplemented!();
                     }
