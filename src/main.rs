@@ -127,7 +127,7 @@ fn main() {
                                     Ok(file) => {
                                         print!("Include file: {:?}", file.path);
 
-                                        match root_file.file_line_from_global(Path::new(CPP_OUTPUT_NAME), offset) {
+                                        match root_file.file_line_from_global(&buffer, offset) {
                                             Ok((line, col)) => 
                                                 println!(", Line: {}, Column: {}", line, col),
                                             Err(err) => println!("{}", err),

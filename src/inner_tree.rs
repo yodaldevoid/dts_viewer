@@ -111,7 +111,7 @@ impl ParsedFile {
         Ok((start, end))
     }
 
-    pub fn file_line_from_global(&self, global_file: &Path, global: usize)
+    pub fn file_line_from_global(&self, global_buffer: &[u8], global: usize)
                                    -> Result<(usize, usize), String> {
         let file = self.file_from_offset(global)?;
         for mapping in &file.mappings {
@@ -127,16 +127,10 @@ impl ParsedFile {
                     }
                     IncludeMethod::CPP => {
                         let (g_line, g_col) = byte_offset_to_line_col(
-                            File::open(global_file)
-                                .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
-                                .bytes()
-                                .filter_map(|e| e.ok()),
+                            global_buffer.iter().map(|b| *b),
                             global);
                         let (s_line, s_col) = byte_offset_to_line_col(
-                            File::open(global_file)
-                                .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
-                                .bytes()
-                                .filter_map(|e| e.ok()),
+                            global_buffer.iter().map(|b| *b),
                             mapping.parent_start);
                         let (c_line, c_col) = byte_offset_to_line_col(
                             File::open(&file.path)
@@ -146,7 +140,11 @@ impl ParsedFile {
                             mapping.child_start);
 
                         let line = g_line - s_line + c_line;
-                        let col = g_col - s_col + c_col;
+                        let col = if g_line == s_line {
+                                g_col - s_col - c_col
+                            } else {
+                                g_col - c_col
+                            };
 
                         return Ok((line, col))
                     }
