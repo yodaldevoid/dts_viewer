@@ -21,13 +21,13 @@ pub fn parse_cpp_outputs<'a>(cpp_stderr: &'a str,
                              cpp_output: &Path,
                              root_file_name: &str)
                              -> Result<(ParsedFile, Vec<u8>), String> {
-    let mut root_file = ParsedFile::new(PathBuf::from(&root_file_name), IncludeMethod::CPP);
-    parse_cpp_stderr(&mut cpp_stderr.lines().peekable(), &mut root_file, 0);
-    // println!("{:#?}", root_file);
-    parse_cpp_file(cpp_output, &mut root_file);
-    // println!("{:#?}", root_file);
-    let result = include_dts_files(cpp_output, &mut root_file, 0)?;
-    Ok((root_file, result))
+    let mut include_tree = ParsedFile::new(PathBuf::from(&root_file_name), IncludeMethod::CPP);
+    parse_cpp_stderr(&mut cpp_stderr.lines().peekable(), &mut include_tree, 0);
+    // println!("{:#?}", include_tree);
+    parse_cpp_file(cpp_output, &mut include_tree);
+    // println!("{:#?}", include_tree);
+    let result = include_dts_files(cpp_output, &mut include_tree, 0)?;
+    Ok((include_tree, result))
 }
 
 // parse stderr to get the include tree
@@ -62,7 +62,7 @@ fn parse_cpp_stderr(lines: &mut Peekable<Lines>, parent_file: &mut ParsedFile, d
 }
 
 // parse preprocessed file to find starts (and stops) of included files
-fn parse_cpp_file(cpp_output: &Path, root_file: &mut ParsedFile) {
+fn parse_cpp_file(cpp_output: &Path, include_tree: &mut ParsedFile) {
     let global_buffer = BufReader::new(File::open(cpp_output).unwrap());
     let mut parsed_lines = global_buffer.lines()
         .enumerate()
@@ -91,7 +91,7 @@ fn parse_cpp_file(cpp_output: &Path, root_file: &mut ParsedFile) {
                               Path::new(cpp_output))
             .unwrap() {
         if let Some(m) = mapping {
-            root_file.assign_mapping(path, m).expect("Failed to assign mapping");
+            include_tree.assign_mapping(path, m).expect("Failed to assign mapping");
         }
     }
 }
@@ -167,7 +167,7 @@ fn parse_cpp_linemarkers<'a>(current: &'a Option<(usize, usize, PathBuf, Option<
 }
 
 fn include_dts_files(file: &Path,
-                     root_file: &mut ParsedFile,
+                     include_tree: &mut ParsedFile,
                      main_offset: usize)
                      -> Result<Vec<u8>, String> {
     let mut file = File::open(file).unwrap();
@@ -184,7 +184,7 @@ fn include_dts_files(file: &Path,
             if let IResult::Done(rem, file) = parse_include(&buf[offset..]) {
                 // println!("{}", file);
                 // println!("Offset: {}", offset);
-                // println!("{:#?}", root_file);
+                // println!("{}", include_tree);
 
                 let eaten_len = (buf.len() - offset) - rem.len();
 
@@ -201,17 +201,17 @@ fn include_dts_files(file: &Path,
                 buffer.extend(include_dts_files(included_path, &mut included_file, total_len)?);
 
                 let (inc_start, inc_end) = included_file.bounds_of_tree()?;
-                root_file.offset_after_location(inc_start, inc_end as isize - inc_start as isize);
+                include_tree.offset_after_location(inc_start, inc_end as isize - inc_start as isize);
                 // println!("After offset");
-                // println!("{:#?}", root_file);
+                // println!("{}", include_tree);
 
                 {
-                    let inc_file = root_file.file_from_offset_mut(inc_start)?;
+                    let inc_file = include_tree.file_from_offset_mut(inc_start)?;
                     inc_file.split_mappings(inc_start, inc_end, eaten_len);
                     inc_file.add_include(included_file);
                 }
                 // println!("After split");
-                // println!("{:#?}", root_file);
+                // println!("{}", include_tree);
 
                 rem
             } else {

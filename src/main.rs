@@ -69,7 +69,7 @@ fn main() {
     let cpp_stderr = String::from_utf8_lossy(&include_output.stderr);
     println!("{}", cpp_stderr);
 
-    let (root_file, buffer) =
+    let (include_tree, buffer) =
         match parse_cpp_outputs(&cpp_stderr, Path::new(CPP_OUTPUT_NAME), &file_name) {
             Ok(v) => v,
             Err(e) => {
@@ -78,7 +78,7 @@ fn main() {
             }
         };
 
-    println!("{}", root_file);
+    println!("{}", include_tree);
     //println!("{}", String::from_utf8_lossy(&buffer));
 
     match parse_dt(&buffer) {
@@ -123,11 +123,11 @@ fn main() {
                                 let offset = change.get_offset();
                                 println!("Start offset: {}", offset);
 
-                                match root_file.file_from_offset(offset) {
+                                match include_tree.file_from_offset(offset) {
                                     Ok(file) => {
                                         print!("Include file: {:?}", file.path);
 
-                                        match root_file.file_line_from_global(&buffer, offset) {
+                                        match include_tree.file_line_from_global(&buffer, offset) {
                                             Ok((line, col)) => 
                                                 println!(", Line: {}, Column: {}", line, col),
                                             Err(err) => println!("{}", err),
