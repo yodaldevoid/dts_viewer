@@ -58,7 +58,6 @@ impl ParsedFile {
         if self.path == path {
             self.mappings.push(mapping);
             self.mappings.sort();
-            // TODO: sanity checks?
             Ok(())
         } else {
             for file in &mut self.included_files {
@@ -75,7 +74,6 @@ impl ParsedFile {
         if self.included_files.iter().all(|f| f.mappings.len() >= 1) {
             self.included_files.sort_by_key(|f| f.mappings[0]);
         }
-        // TODO: sanity checks?
     }
 
     pub fn bounds_of_tree(&self) -> Result<(usize, usize), String> {

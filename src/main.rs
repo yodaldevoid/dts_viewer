@@ -29,11 +29,11 @@ const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
  *  create mapping of full paths to objects
  *  create mapping of labels to full paths
  *  Parse device tree to create changes
- *  TODO: Use mapping and file starts to pair changes to file byte offsets
+ *  Use mapping and file starts to pair changes to file byte offsets
  *  Turn file byte offsets to file lines/cols
  *  TODO: ???
  *  TODO: Profit!
- *  TODO: Oh, and somehow display the damn information
+ *  Oh, and somehow display the damn information
  */
 fn main() {
     let file_name = match env::args().nth(1) {
@@ -63,7 +63,6 @@ fn main() {
     }
     // }
 
-    // TODO: properly handle errors
     let include_output = cpp_command.output().expect("failed to execute process");
 
     let cpp_stderr = String::from_utf8_lossy(&include_output.stderr);

@@ -295,13 +295,15 @@ fn from_str_dec<T: FromStr>(s: &str) -> Result<T, T::Err> {
 named!(eat_junk,
        do_parse!(many0!(alt!(delimited!(tag!("/*"), take_until!("*/"), tag!("*/")) |
                              delimited!(tag!("//"), not_line_ending, line_ending) |
-                             do_parse!( // TODO: maybe actually parse the info. Or not.
-                                       tag!("#") >> opt!(tag!("line")) >> many1!(space) >>
+                             do_parse!(tag!("#") >>
+                                       opt!(tag!("line")) >>
+                                       many1!(space) >>
                                        many1!(digit) >>
                                        many1!(space) >>
                                        string: not_line_ending >>
                                        line_ending >>
-                                       (string)) | multispace)) >> (&b""[..])));
+                                       (string)) |
+                             multispace)) >> (&b""[..])));
 
 macro_rules! comments_ws (
     ($i:expr, $($args:tt)*) => ( {
@@ -613,14 +615,15 @@ pub fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
 }
 
 named!(pub integer<u64>, alt_complete!(
-/*
+    // TODO:
+    /*
     comments_ws!(do_parse!( // trinary
         a: flat_map!(take_until_and_consume!("?"), integer) >>
         b: flat_map!(take_until_and_consume!(":"), integer) >>
         c: integer >>
         (if a != 0 { b } else { c })
     )) |
-*/
+    */
     complete!(preceded!(tag_no_case!("0x"),
         map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) |
     preceded!(tag_no_case!("0"),
@@ -858,7 +861,6 @@ named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_
 )));
 
 // TODO: error messages
-// TODO: track offsets
 pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
     match parse_dts(source, source.len()) {
         IResult::Done(remaining, device_tree) => {

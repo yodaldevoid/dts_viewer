@@ -73,8 +73,8 @@ fn parse_cpp_file(cpp_output: &Path, include_tree: &mut ParsedFile) {
         .map(|(line_num, line)| {
             let line = line.unwrap();
             let tokens: Vec<&str> = line.split('"').map(|s| s.trim_matches('#').trim()).collect();
-            let child_num: usize = tokens[0].parse().unwrap();  //TODO: check length before assuming
-            let flag = match tokens[2].parse().unwrap_or(0) { //TODO: make conversion function
+            let child_num: usize = tokens[0].parse().unwrap();
+            let flag = match tokens[2].parse().unwrap_or(0) {
                 1 => Some(LinemarkerFlag::Start),
                 2 => Some(LinemarkerFlag::Return),
                 3 => Some(LinemarkerFlag::System),
