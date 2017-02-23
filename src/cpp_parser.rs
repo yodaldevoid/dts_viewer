@@ -191,7 +191,7 @@ fn include_dts_files(file: &Path,
                 let included_path = Path::new(&file);
                 let mut included_file = ParsedFile::new(included_path.to_path_buf(),
                                                         IncludeMethod::DTS);
-                let total_len = buffer.len() + main_offset;
+                let total_len = buffer.len() + main_offset - 1;
                 included_file.mappings.push(FileMapping {
                     parent_start: total_len,
                     child_start: 0,
@@ -201,7 +201,10 @@ fn include_dts_files(file: &Path,
                 buffer.extend(include_dts_files(included_path, &mut included_file, total_len)?);
 
                 let (inc_start, inc_end) = included_file.bounds_of_tree()?;
-                include_tree.offset_after_location(inc_start, inc_end as isize - inc_start as isize);
+                include_tree.offset_after_location(inc_start,
+                                                   inc_end as isize
+                                                   - inc_start as isize
+                                                   - eaten_len as isize);
                 // println!("After offset");
                 // println!("{}", include_tree);
 
