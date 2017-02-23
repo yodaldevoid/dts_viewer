@@ -5,3 +5,4 @@ authors = ["Gabriel Smith <ga29smith@gmail.com>"]
 
 [dependencies]
 nom = { version = "^2", features = ["verbose-errors"] }
+clap = "^2"
