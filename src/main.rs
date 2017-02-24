@@ -83,7 +83,7 @@ fn main() {
     }
 
     let (include_tree, buffer) =
-        match parse_cpp_outputs(&cpp_stderr, Path::new(CPP_OUTPUT_NAME), &file_name) {
+        match parse_cpp_outputs(&cpp_stderr, Path::new(CPP_OUTPUT_NAME), file_name) {
             Ok(v) => v,
             Err(e) => {
                 println!("{}", e);

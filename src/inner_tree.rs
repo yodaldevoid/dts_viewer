@@ -3,6 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::Read;
+use std::borrow::Borrow;
 
 #[derive(Debug)]
 pub struct ParsedFile {
@@ -124,12 +125,10 @@ impl ParsedFile {
                             global - mapping.parent_start + mapping.child_start));
                     }
                     IncludeMethod::CPP => {
-                        let (g_line, g_col) = byte_offset_to_line_col(
-                            global_buffer.iter().map(|b| *b),
-                            global);
-                        let (s_line, s_col) = byte_offset_to_line_col(
-                            global_buffer.iter().map(|b| *b),
-                            mapping.parent_start);
+                        let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(),
+                                                                      global);
+                        let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
+                                                                      mapping.parent_start);
                         let (c_line, c_col) = byte_offset_to_line_col(
                             File::open(&file.path)
                                 .expect(&format!("File not found: {}", file.path.to_str().unwrap()))
@@ -272,21 +271,25 @@ impl Display for IncludeMethod {
     }
 }
 
-pub fn line_to_byte_offset<I: Iterator<Item = u8>>(bytes: I, line: usize) -> Result<usize, String> {
+pub fn line_to_byte_offset<K, I>(bytes: I, line: usize) -> Result<usize, String>
+where K: Borrow<u8> + Eq,
+      I: Iterator<Item = K> {
     if line == 1 {
         Ok(0)
     } else {
         bytes.enumerate()
-            .filter(|&(_, byte)| byte == b'\n')
+            .filter(|&(_, ref byte)| byte.borrow() == &b'\n')
             .nth(line - 2)
             .map(|(offset, _)| offset)
             .ok_or_else(|| "Failed converting from line to byte offset".to_string())
     }
 }
 
-pub fn byte_offset_to_line_col<I: Iterator<Item = u8>>(bytes: I, offset: usize) -> (usize, usize) {
+pub fn byte_offset_to_line_col<K, I>(bytes: I, offset: usize) -> (usize, usize)
+    where K: Borrow<u8> + Eq,
+          I: Iterator<Item = K> {
     let opt = bytes.enumerate()
-        .filter(|&(off, byte)| off <= offset && byte == b'\n')
+        .filter(|&(off, ref byte)| off <= offset && byte.borrow() == &b'\n' )
         .map(|(start, _)| start)
         .enumerate()
         .last();
@@ -304,22 +307,22 @@ mod tests {
     #[test]
     fn lines_to_bytes() {
         let string = "Howdy\nHow goes it\nI'm doing fine\n";
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 1).unwrap(),
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 1).unwrap(),
                    0);
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 2).unwrap(),
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 2).unwrap(),
                    5);
-        assert_eq!(line_to_byte_offset(string.as_bytes().iter().map(|b| *b), 3).unwrap(),
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 3).unwrap(),
                    17);
     }
 
     #[test]
     fn bytes_to_lines() {
         let string = "Howdy\nHow goes it\nI'm doing fine\n";
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter().map(|b| *b), 0),
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 0),
                    (1, 1));
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter().map(|b| *b), 8),
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 8),
                    (2, 3));
-        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter().map(|b| *b), 20),
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 20),
                    (3, 3));
     }
 }
