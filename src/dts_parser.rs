@@ -76,10 +76,7 @@ impl<'a> fmt::Display for Element<'a> {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Node {
-    Deleted {
-        name: String,
-        offset: usize,
-    },
+    Deleted { name: String, offset: usize },
     Existing {
         name: NodeName,
         proplist: Vec<Property>,
@@ -95,14 +92,14 @@ pub enum Node {
         labels: Vec<String>,
 
         offset: usize,
-    }
+    },
 }
 
 impl Labeled for Node {
     fn add_label(&mut self, label: &str) {
         match *self {
             Node::Deleted { .. } => panic!("Why are you adding a label to a deleted node?!"),
-            Node::Existing{ ref mut labels, .. } => {
+            Node::Existing { ref mut labels, .. } => {
                 let label = label.to_string();
                 if labels.contains(&label) {
                     labels.push(label);
@@ -115,7 +112,8 @@ impl Labeled for Node {
 impl Offset for Node {
     fn get_offset(&self) -> usize {
         match *self {
-            Node::Deleted { offset, .. } | Node::Existing { offset, .. } => offset,
+            Node::Deleted { offset, .. } |
+            Node::Existing { offset, .. } => offset,
         }
     }
 }
@@ -132,10 +130,10 @@ impl fmt::Display for Node {
                 }
                 for node in children {
                     match *node {
-                        Node::Deleted { ref name, .. } =>
-                            writeln!(f, "    // Node {} deleted", name)?,
-                        Node::Existing { ref name, .. } =>
-                            writeln!(f, "    {} {{ ... }}", name)?
+                        Node::Deleted { ref name, .. } => {
+                            writeln!(f, "    // Node {} deleted", name)?
+                        }
+                        Node::Existing { ref name, .. } => writeln!(f, "    {} {{ ... }}", name)?,
                     }
                 }
                 write!(f, "}}")?;
@@ -149,13 +147,14 @@ impl fmt::Display for Node {
 #[derive(PartialEq, Eq, Debug)]
 pub enum NodeName {
     Label(String),
-    Full(String)
+    Full(String),
 }
 
 impl fmt::Display for NodeName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            NodeName::Label(ref name) | NodeName::Full(ref name) => write!(f, "{}", name),
+            NodeName::Label(ref name) |
+            NodeName::Full(ref name) => write!(f, "{}", name),
         }
     }
 }
@@ -163,30 +162,30 @@ impl fmt::Display for NodeName {
 impl NodeName {
     pub fn to_str(&self) -> &str {
         match *self {
-            NodeName::Label(ref name) | NodeName::Full(ref name) => name,
+            NodeName::Label(ref name) |
+            NodeName::Full(ref name) => name,
         }
     }
 }
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Property {
-    Deleted {
-        name: String,
-        offset: usize,
-    },
+    Deleted { name: String, offset: usize },
     Existing {
         name: String,
         val: Option<Vec<Data>>,
         labels: Vec<String>,
         offset: usize,
-    }
+    },
 }
 
 impl Labeled for Property {
     fn add_label(&mut self, label: &str) {
         match *self {
-            Property::Deleted { .. } => panic!("Why are you adding a label to a deleted property?!"),
-            Property::Existing{ ref mut labels, .. } => {
+            Property::Deleted { .. } => {
+                panic!("Why are you adding a label to a deleted property?!")
+            }
+            Property::Existing { ref mut labels, .. } => {
                 let label = label.to_string();
                 if labels.contains(&label) {
                     labels.push(label);
@@ -199,7 +198,8 @@ impl Labeled for Property {
 impl Offset for Property {
     fn get_offset(&self) -> usize {
         match *self {
-            Property::Deleted { offset, .. } | Property::Existing { offset, .. } => offset,
+            Property::Deleted { offset, .. } |
+            Property::Existing { offset, .. } => offset,
         }
     }
 }
@@ -267,7 +267,7 @@ impl fmt::Display for Data {
                 if !arr.is_empty() {
                     let mut iter = arr.iter();
                     write!(f, "{:02X}", iter.next().unwrap())?;
-                    for d in iter{
+                    for d in iter {
                         write!(f, " {:02X}", d)?;
                     }
                 }
@@ -295,15 +295,12 @@ fn from_str_dec<T: FromStr>(s: &str) -> Result<T, T::Err> {
 named!(eat_junk,
        do_parse!(many0!(alt!(delimited!(tag!("/*"), take_until!("*/"), tag!("*/")) |
                              delimited!(tag!("//"), not_line_ending, line_ending) |
-                             do_parse!(tag!("#") >>
-                                       opt!(tag!("line")) >>
-                                       many1!(space) >>
+                             do_parse!(tag!("#") >> opt!(tag!("line")) >> many1!(space) >>
                                        many1!(digit) >>
                                        many1!(space) >>
                                        string: not_line_ending >>
                                        line_ending >>
-                                       (string)) |
-                             multispace)) >> (&b""[..])));
+                                       (string)) | multispace)) >> (&b""[..])));
 
 macro_rules! comments_ws (
     ($i:expr, $($args:tt)*) => ( {
@@ -577,9 +574,7 @@ pub fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                                     );
                                 }
                             }
-                            _ => return IResult::Error(
-                                    error_position!(ErrorKind::Custom(1), buf)
-                                ),
+                            _ => return IResult::Error(error_position!(ErrorKind::Custom(1), buf)),
                         }
                     }
 
@@ -874,9 +869,7 @@ pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
             }
         }
         IResult::Incomplete(_) => Err("Incomplete input".to_string()),
-        IResult::Error(err) => {
-            Err(format!("Error during parsing: {:?}", err))
-        }
+        IResult::Error(err) => Err(format!("Error during parsing: {:?}", err)),
     }
 }
 

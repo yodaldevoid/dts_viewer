@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::path::{ Path, PathBuf };
+use std::path::{Path, PathBuf};
 
-use dts_parser::{ BootInfo, Node, NodeName, Property, Element };
+use dts_parser::{BootInfo, Node, NodeName, Property, Element};
 
 #[derive(Debug)]
 pub struct LabelStore<'a> {
@@ -11,7 +11,10 @@ pub struct LabelStore<'a> {
 
 impl<'a> LabelStore<'a> {
     pub fn new() -> LabelStore<'a> {
-        LabelStore { paths: HashMap::new(), labels: HashMap::new() }
+        LabelStore {
+            paths: HashMap::new(),
+            labels: HashMap::new(),
+        }
     }
 
     // TODO: somehow keep track of deleted labels so they can be searched for later
@@ -38,12 +41,14 @@ impl<'a> LabelStore<'a> {
                 let node_path = path.join(name);
                 self.delete_labels(&node_path);
 
-                self.paths.entry(path.join(name))
-                          .or_insert_with(Vec::new)
-                          .push(Element::Node(node));
+                self.paths
+                    .entry(path.join(name))
+                    .or_insert_with(Vec::new)
+                    .push(Element::Node(node));
 
-                let paths: Vec<PathBuf> = self.paths.iter().filter_map(
-                    |(key, val)| if key.starts_with(&node_path) {
+                let paths: Vec<PathBuf> = self.paths
+                    .iter()
+                    .filter_map(|(key, val)| if key.starts_with(&node_path) {
                         match val.last() {
                             Some(&Element::Node(&Node::Existing { .. })) |
                             Some(&Element::Prop(&Property::Existing { .. })) => {
@@ -77,18 +82,20 @@ impl<'a> LabelStore<'a> {
                             let label_path = node_path.join(name);
                             self.delete_labels(&label_path);
 
-                            self.paths.entry(label_path)
-                                      .or_insert_with(Vec::new)
-                                      .push(Element::Prop(prop));
-                        },
+                            self.paths
+                                .entry(label_path)
+                                .or_insert_with(Vec::new)
+                                .push(Element::Prop(prop));
+                        }
                         Property::Existing { ref name, ref labels, .. } => {
                             let label_path = node_path.join(name);
                             self.insert_labels(&label_path, labels);
 
-                            self.paths.entry(label_path)
-                                      .or_insert_with(Vec::new)
-                                      .push(Element::Prop(prop));
-                        },
+                            self.paths
+                                .entry(label_path)
+                                .or_insert_with(Vec::new)
+                                .push(Element::Prop(prop));
+                        }
                     }
                 }
 
@@ -96,9 +103,10 @@ impl<'a> LabelStore<'a> {
                     self.fill_internal(&node_path, node);
                 }
 
-                self.paths.entry(node_path)
-                          .or_insert_with(Vec::new)
-                          .push(Element::Node(node));
+                self.paths
+                    .entry(node_path)
+                    .or_insert_with(Vec::new)
+                    .push(Element::Node(node));
             }
         }
     }

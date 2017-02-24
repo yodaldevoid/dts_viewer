@@ -19,6 +19,9 @@ pub enum IncludeMethod {
     CPP,
 }
 
+// TODO: turn into enum with Lines and Bytes forms.
+// Use Lines for mapping between CPP files and
+// use Bytes for dealing with DTS files,
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileMapping {
     pub parent_start: usize,
@@ -110,8 +113,10 @@ impl ParsedFile {
         Ok((start, end))
     }
 
-    pub fn file_line_from_global(&self, global_buffer: &[u8], global: usize)
-                                   -> Result<(usize, usize), String> {
+    pub fn file_line_from_global(&self,
+                                 global_buffer: &[u8],
+                                 global: usize)
+                                 -> Result<(usize, usize), String> {
         let file = self.file_from_offset(global)?;
         for mapping in &file.mappings {
             if global >= mapping.parent_start && global < mapping.parent_end() {
@@ -125,8 +130,7 @@ impl ParsedFile {
                             global - mapping.parent_start + mapping.child_start));
                     }
                     IncludeMethod::CPP => {
-                        let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(),
-                                                                      global);
+                        let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), global);
                         let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
                                                                       mapping.parent_start);
                         let (c_line, c_col) = byte_offset_to_line_col(
@@ -136,21 +140,27 @@ impl ParsedFile {
                                 .filter_map(|e| e.ok()),
                             mapping.child_start);
 
+                        // println!();
+                        // println!("parent_start: {}, child_start: {}",
+                        //     mapping.parent_start, mapping.child_start);
+                        // println!("g_line: {}, s_line: {}, c_line: {}", g_line, s_line, c_line);
+                        // println!("g_col: {}, s_col: {}, c_col: {}", g_col, s_col, c_col);
+
                         let line = g_line - s_line + c_line;
                         let col = if g_line == s_line {
-                                g_col - s_col - c_col
-                            } else {
-                                g_col - c_col
-                            };
+                            g_col - s_col - c_col
+                        } else {
+                            g_col - c_col
+                        };
 
-                        return Ok((line, col))
+                        return Ok((line, col));
                     }
                 }
             }
         }
 
         Err("Failed to find mapping from global offset to file offset".to_string())
-    }    
+    }
 
     pub fn file_from_offset(&self, offset: usize) -> Result<&ParsedFile, String> {
         if !self.mappings.is_empty() &&
@@ -248,11 +258,14 @@ impl ParsedFile {
         let mut next_prefix = prefix.to_string();
         next_prefix.push_str(" |-");
         writeln!(f, "{} {:?}: {}", prefix, self.path, self.method)?;
+        // for map in &self.mappings {
+        // writeln!(f, "{}, {}, {}", map.parent_start, map.child_start, map.len)?;
+        // }
         for file in &self.included_files {
             file.write(f, &next_prefix)?;
-		}
+        }
 
-		Ok(())
+        Ok(())
     }
 }
 
@@ -272,8 +285,9 @@ impl Display for IncludeMethod {
 }
 
 pub fn line_to_byte_offset<K, I>(bytes: I, line: usize) -> Result<usize, String>
-where K: Borrow<u8> + Eq,
-      I: Iterator<Item = K> {
+    where K: Borrow<u8> + Eq,
+          I: Iterator<Item = K>
+{
     if line == 1 {
         Ok(0)
     } else {
@@ -287,9 +301,10 @@ where K: Borrow<u8> + Eq,
 
 pub fn byte_offset_to_line_col<K, I>(bytes: I, offset: usize) -> (usize, usize)
     where K: Borrow<u8> + Eq,
-          I: Iterator<Item = K> {
+          I: Iterator<Item = K>
+{
     let opt = bytes.enumerate()
-        .filter(|&(off, ref byte)| off <= offset && byte.borrow() == &b'\n' )
+        .filter(|&(off, ref byte)| off <= offset && byte.borrow() == &b'\n')
         .map(|(start, _)| start)
         .enumerate()
         .last();

@@ -9,33 +9,31 @@ mod dts_parser;
 mod change_tracker;
 
 use std::process::Command;
-use std::path::{ Path, PathBuf };
+use std::path::{Path, PathBuf};
 use std::fs::remove_file;
-use std::io::{ self, BufRead, Write };
+use std::io::{self, BufRead, Write};
 
 use cpp_parser::parse_cpp_outputs;
-use dts_parser::{ Offset, parse_dt };
+use dts_parser::{Offset, parse_dt};
 use change_tracker::LabelStore;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
-/*
- * General idea:
- *  Run CPP
- *  Parse file for DTS includes and replace with include contents
- *  Find byte starts/ends for each file
- *  Parse file to create device tree
- *  create mapping of objects to byte offset starting points
- *  - not perfect with offsets stored in object, but it will do
- *  create mapping of full paths to objects
- *  create mapping of labels to full paths
- *  Parse device tree to create changes
- *  Use mapping and file starts to pair changes to file byte offsets
- *  Turn file byte offsets to file lines/cols
- *  TODO: ???
- *  TODO: Profit!
- *  Oh, and somehow display the damn information
- */
+// General idea:
+//  Run CPP
+//  Parse file for DTS includes and replace with include contents
+//  Find byte starts/ends for each file
+//  Parse file to create device tree
+//  create mapping of objects to byte offset starting points
+//  - not perfect with offsets stored in object, but it will do
+//  create mapping of full paths to objects
+//  create mapping of labels to full paths
+//  Parse device tree to create changes
+//  Use mapping and file starts to pair changes to file byte offsets
+//  Turn file byte offsets to file lines/cols
+//  TODO: ???
+//  TODO: Profit!
+//  Oh, and somehow display the damn information
 fn main() {
     let matches = clap_app!(dts_viewer =>
             (version: crate_version!())
@@ -44,7 +42,8 @@ fn main() {
             (@arg no_defaults: -n --no_defaults "Disable default includes. \
                 An 'include' directory, if it exists, is automatically included")
             (@arg include: -I ... +takes_value "Additional files to pass to CPP as an include")
-        ).get_matches();
+        )
+        .get_matches();
 
     let file_name = matches.value_of("file").unwrap();
 
@@ -100,37 +99,39 @@ fn main() {
 
     let (boot_info, ammends) = match parse_dt(&buffer) {
         Ok(dt) => dt,
-        Err(err) => { println!("{:?}", err); return }
+        Err(err) => {
+            println!("{:?}", err);
+            return;
+        }
     };
 
     // TODO: perform secondary checks and jazz (only smooth)
-    /*
-        checkes to do: 
-            duplicate node names
-            duplicate property names
-            node name format (only one @)
-            unit addr vs reg/ranges property
-            duplicate labels -- handled by creation of alias store
-            duplicate explict phandles
-            name property does not match name
-            check if X is cell only
-                #address-cells
-                #size-cells
-                #interrupt-cells
-            check if X is string only
-                device_type
-                model
-                status
-            fixup addr size cells
-            check reg property format
-            check ranges property format
-            avoid default addr size?
-            obsolete chosen iterrupt controller
-
-        maybe:
-            fixup phandle refs
-            fixup path refs
-     */
+    //
+    // checkes to do:
+    // duplicate node names
+    // duplicate property names
+    // node name format (only one @)
+    // unit addr vs reg/ranges property
+    // duplicate labels -- handled by creation of alias store
+    // duplicate explict phandles
+    // name property does not match name
+    // check if X is cell only
+    // #address-cells
+    // #size-cells
+    // #interrupt-cells
+    // check if X is string only
+    // device_type
+    // model
+    // status
+    // fixup addr size cells
+    // check reg property format
+    // check ranges property format
+    // avoid default addr size?
+    // obsolete chosen iterrupt controller
+    //
+    // maybe:
+    // fixup phandle refs
+    // fixup path refs
 
     let mut store = LabelStore::new();
     store.fill(&boot_info, &ammends);
@@ -182,7 +183,9 @@ fn main() {
                             Ok(file) => {
                                 print!("File: {}", file.path.to_string_lossy());
                                 match include_tree.file_line_from_global(&buffer, offset) {
-                                    Ok((line, col)) => println!(", Line: {}, Column: {}", line, col),
+                                    Ok((line, col)) => {
+                                        println!(", Line: {}, Column: {}", line, col)
+                                    }
                                     Err(err) => println!("{}", err),
                                 }
                             }

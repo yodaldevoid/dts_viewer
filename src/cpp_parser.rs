@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::str::Lines;
-use std::io::{ Read, BufRead, BufReader };
+use std::io::{Read, BufRead, BufReader};
 use std::iter::Peekable;
 
 use nom::IResult;
@@ -202,9 +202,8 @@ fn include_dts_files(file: &Path,
 
                 let (inc_start, inc_end) = included_file.bounds_of_tree()?;
                 include_tree.offset_after_location(inc_start,
-                                                   inc_end as isize
-                                                   - inc_start as isize
-                                                   - eaten_len as isize);
+                                                   inc_end as isize - inc_start as isize -
+                                                   eaten_len as isize);
                 // println!("After offset");
                 // println!("{}", include_tree);
 
