@@ -2,6 +2,11 @@
 name = "dts_viewer"
 version = "0.1.0"
 authors = ["Gabriel Smith <ga29smith@gmail.com>"]
+description = "A program to allow easier viewing of device tree files."
+readme = "README.md"
+license = "MIT"
+categories = ["command-line-utilities"]
+repository = "https://github.com/yodaldevoid/dts_viewer"
 
 [dependencies]
 nom = { version = "^2", features = ["verbose-errors"] }
