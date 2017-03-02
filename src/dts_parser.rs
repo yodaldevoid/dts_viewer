@@ -892,7 +892,7 @@ mod tests {
     use nom::IResult;
 
     #[test]
-    fn parse_prop_empty() {
+    fn prop_empty() {
         let input = b"empty_prop;";
         assert_eq!(
             parse_prop(input, input.len()),
@@ -909,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_prop_cells() {
+    fn prop_cells() {
         let input = b"cell_prop = < 1 2 10 >;";
         assert_eq!(
             parse_prop(input, input.len()),
@@ -926,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_prop_strings() {
+    fn prop_strings() {
         let input = b"string_prop = \"string\", \"string2\";";
         assert_eq!(
             parse_prop(input, input.len()),
@@ -946,7 +946,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_prop_bytes() {
+    fn prop_bytes() {
         let input = b"bytes_prop = [1234 56 78];";
         assert_eq!(
             parse_prop(input, input.len()),
@@ -963,7 +963,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_prop_mixed() {
+    fn prop_mixed() {
         let input = b"mixed_prop = \"abc\", [1234], <0xa 0xb 0xc>;";
         assert_eq!(
             parse_prop(input, input.len()),
@@ -1018,7 +1018,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_string_pain() {
+    fn data_string_pain() {
         assert_eq!(
             parse_data(b"\"\\x7f\\0stuffstuff\\t\\t\\t\\n\\n\\n\""),
             IResult::Done(
@@ -1029,7 +1029,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_sized_cell_1() {
+    fn data_cell_sized_8_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 8 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xde>"),
             IResult::Done(&b""[..], Data::Cells(8, vec![
@@ -1040,7 +1040,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_sized_cell_2() {
+    fn data_cell_sized_16_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 16 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdead>"),
             IResult::Done(&b""[..], Data::Cells(16, vec![
@@ -1051,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_sized_cell_3() {
+    fn data_cell_sized_32_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 32 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef>"),
             IResult::Done(&b""[..], Data::Cells(32, vec![
@@ -1062,7 +1062,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_sized_cell_4() {
+    fn data_cell_sized_64_escapes() {
         assert_eq!(
             parse_data(b"/bits/ 64 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef00000000>"),
             IResult::Done(&b""[..], Data::Cells(64, vec![
@@ -1073,7 +1073,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_sized_cell_5() {
+    fn data_cell_sized_default() {
         assert_eq!(
             parse_data(b"<0x12345678 0x0000ffff>"),
             IResult::Done(&b""[..], Data::Cells(32, vec![(0x12345678, None), (0x0000FFFF, None)]))
@@ -1081,7 +1081,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_data_sized_cell_6() {
+    fn data_cell_sized_16() {
         assert_eq!(
             parse_data(b"/bits/ 16 <0x1234 0x5678 0x0 0xffff>"),
             IResult::Done(&b""[..], Data::Cells(16,
@@ -1094,7 +1094,7 @@ mod tests {
     // TODO: ref in non 32 bit cells
 
     #[test]
-    fn parse_integer_1() {
+    fn integer_1() {
         assert_eq!(
             parse_c_expr(b"(64)"),
             IResult::Done(&b""[..], 64)
@@ -1102,7 +1102,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_integer_2() {
+    fn integer_2() {
         assert_eq!(
             parse_c_expr(b"(1 << 5)"),
             IResult::Done(&b""[..], 32)
@@ -1110,7 +1110,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_integer_3() {
+    fn integer_3() {
         assert_eq!(
             parse_c_expr(b"(((1 << 5)) | 7)"),
             IResult::Done(&b""[..], 39)
@@ -1118,7 +1118,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_integer_4() {
+    fn integer_4() {
         assert_eq!(
             parse_c_expr(b"((((50))))"),
             IResult::Done(&b""[..], 50)
@@ -1126,7 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_integer_5() {
+    fn integer_5() {
         assert_eq!(
             parse_c_expr(b"((((0x910)) & 0xffff) - (0x800))"),
             IResult::Done(&b""[..], 272)
@@ -1134,7 +1134,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_math_cell_1() {
+    fn math_cell_1() {
         assert_eq!(
             parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) >"),
             IResult::Done(&b""[..], Data::Cells(32, vec![(272, None)]))
@@ -1142,7 +1142,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_math_cell_2() {
+    fn math_cell_2() {
         assert_eq!(
             parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) (0 | 3) >"),
             IResult::Done(&b""[..], Data::Cells(32, vec![(272, None), (3, None)]))
