@@ -1090,8 +1090,29 @@ mod tests {
         );
     }
 
-    // TODO: incorrect sized cells
-    // TODO: ref in non 32 bit cells
+    #[test]
+    fn data_cell_sized_incorrect() {
+        match parse_data(b"/bits/ 16 <0x12345678 0x0000ffff>") {
+            IResult::Error(_) => {},
+            x => panic!(format!("parse_data did not return error: {:?}", x)),
+        }
+    }
+
+    #[test]
+    fn data_cell_sized_incorrect_ref() {
+        match parse_data(b"/bits/ 16 <&ref>") {
+            IResult::Error(_) => {},
+            x => panic!(format!("parse_data did not return error: {:?}", x)),
+        }
+    }
+
+    #[test]
+    fn data_cell_ref() {
+        assert_eq!(
+            parse_data(b"<&ref>"),
+            IResult::Done(&b""[..], Data::Cells(32, vec![(0, Some("ref".to_string()))]))
+        );
+    }
 
     #[test]
     fn integer_1() {
