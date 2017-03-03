@@ -14,7 +14,7 @@ use std::fs::remove_file;
 use std::io::{self, BufRead, Write};
 
 use cpp_parser::parse_cpp_outputs;
-use dts_parser::{Offset, parse_dt};
+use dts_parser::{Element, Node, Property, Offset, Diff, parse_dt};
 use change_tracker::LabelStore;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
@@ -175,10 +175,8 @@ fn main() {
 
         if let Some(path) = path {
             match store.changes_from_path(&path) {
-                Some(changes) => {
-                    for change in changes {
-                        let offset = change.get_offset();
-                        // println!("Start offset: {}", offset);
+                Some(elements) => {
+                    let print_offset = |offset| {
                         match include_tree.file_from_offset(offset) {
                             Ok(file) => {
                                 print!("File: {}", file.path.to_string_lossy());
@@ -191,7 +189,42 @@ fn main() {
                             }
                             Err(err) => println!("{}", err),
                         }
-                        println!("{}\n", change);
+                    };
+
+                    match elements.first() {
+                        Some(&Element::Node(_)) => {
+                            let nodes: Vec<&Node> = elements.iter().map(|e| match *e {
+                                Element::Node(n) => n,
+                                _ => unreachable!(),
+                            }).collect();
+                            if let Some((&first, rest)) = nodes.split_first() {
+                                print_offset(first.get_offset());
+                                let mut total = first.clone();
+                                println!("{}\n", first);
+                                for node in rest {
+                                    print_offset(node.get_offset());
+                                    total = total.diff(node);
+                                    println!();
+                                }
+                            }
+                        }
+                        Some(&Element::Prop(_)) => {
+                            let props: Vec<&Property> = elements.iter().map(|e| match *e {
+                                Element::Prop(n) => n,
+                                _ => unreachable!(),
+                            }).collect();
+                            if let Some((&first, rest)) = props.split_first() {
+                                print_offset(first.get_offset());
+                                let mut total = first.clone();
+                                println!("{}\n", first);
+                                for prop in rest {
+                                    print_offset(prop.get_offset());
+                                    total = total.diff(prop);
+                                    println!();
+                                }
+                            }
+                        }
+                        None => unreachable!(),
                     }
                 }
                 None => println!("Nothing at path"),
