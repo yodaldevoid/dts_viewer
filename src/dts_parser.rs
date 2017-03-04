@@ -125,157 +125,149 @@ impl Offset for Node {
 impl Diff for Node {
     // TODO: print labels
     fn diff(&self, other: &Self) -> Self {
-        match *self {
-            Node::Existing { ref name,
+        match (self, other) {
+            (&Node::Existing { ref name,
                              proplist: ref self_plist,
                              children: ref self_c,
                              labels: ref self_labels,
-                             .. } => {
-                match *other {
-                    Node::Existing { proplist: ref other_plist,
-                                     children: ref other_c,
-                                     labels: ref other_labels,
-                                     .. } => {
-                        println!("  {} {{", name);
+                             .. },
+             &Node::Existing { proplist: ref other_plist,
+                              children: ref other_c,
+                              labels: ref other_labels,
+                              .. }) => {
+                println!("  {} {{", name);
 
-                        let mut proplist = Vec::new();
-                        for old_prop in self_plist {
-                            let old_name = old_prop.name();
-                            let new_prop = other_plist.iter().find(|p| p.name() == old_name);
+                let mut proplist = Vec::new();
+                for old_prop in self_plist {
+                    let old_name = old_prop.name();
+                    let new_prop = other_plist.iter().find(|p| p.name() == old_name);
 
-                            match new_prop {
-                                None => if let Property::Existing { .. } = *old_prop {
-                                    println!("      {}", old_prop);
-                                    proplist.push(old_prop.clone());
-                                },
-                                Some(p) => if old_prop == p {
-                                    if let Property::Deleted { .. } = *old_prop {
-                                        println!("      // Property {} deleted without existing",
-                                                 name);
-                                    } else {
-                                        println!("      {}", old_prop);
-                                        proplist.push(p.clone());
-                                    }
-                                } else {
-                                    if let Property::Existing { .. } = *old_prop {
-                                        println!("-     {}", old_prop);
-                                    }
-                                    if let Property::Existing { .. } = *p {
-                                        println!("+     {}", p);
-                                        proplist.push(p.clone());
-                                    }
-                                }
+                    match new_prop {
+                        None => if let Property::Existing { .. } = *old_prop {
+                            println!("      {}", old_prop);
+                            proplist.push(old_prop.clone());
+                        },
+                        Some(p) => if old_prop == p {
+                            if let Property::Deleted { .. } = *old_prop {
+                                println!("      // Property {} deleted without existing",
+                                         name);
+                            } else {
+                                println!("      {}", old_prop);
+                                proplist.push(p.clone());
                             }
-                        }
-                        for prop in other_plist {
-                            let new_name = prop.name();
-                            if !self_plist.iter().any(|p| p.name() == new_name) {
-                                match *prop {
-                                    Property::Deleted { ref name, .. } => {
-                                        println!("// Property {} deleted without existing", name);
-                                    }
-                                    Property::Existing { .. } => {
-                                        println!("+     {}", prop);
-                                        proplist.push(prop.clone());
-                                    }
-                                }
+                        } else {
+                            if let Property::Existing { .. } = *old_prop {
+                                println!("-     {}", old_prop);
                             }
-                        }
-
-                        let mut children = Vec::new();
-                        for old_child in self_c {
-                            let old_name = old_child.name();
-                            let new_node = other_c.iter().find(|c| c.name() == old_name);
-
-                            match new_node {
-                                None => if let Node::Existing { ref name, .. } = *old_child {
-                                    println!("      {} {{ ... }}", name);
-                                    children.push(old_child.clone());
-                                },
-                                Some(node) => match *node {
-                                    Node::Deleted { ref name, .. } => {
-                                        if let Node::Existing { .. } = *old_child {
-                                            println!("-     {} {{ ... }}", name)
-                                        }
-                                    }
-                                    Node::Existing { ref name, .. } => {
-                                        if let Node::Existing { .. } = *old_child {
-                                            println!("      {} {{ ... }}", name);
-                                        } else {
-                                            println!("+     {} {{ ... }}", name);
-                                        }
-                                        children.push(node.clone());
-                                    }
-                                }
+                            if let Property::Existing { .. } = *p {
+                                println!("+     {}", p);
+                                proplist.push(p.clone());
                             }
-                        }
-                        for child in other_c {
-                            let new_name = child.name();
-                            if !self_c.iter().any(|c| c.name() == new_name) {
-                                match *child {
-                                    Node::Deleted { ref name, .. } => {
-                                        println!("// Node {} deleted without existing", name);
-                                    }
-                                    Node::Existing { ref name, ..} => {
-                                        println!("+     {} {{ ... }}", name);
-                                        children.push(child.clone())
-                                    }
-                                }
-                            }
-                        }
-
-                        let mut labels = self_labels.clone();
-                        labels.extend_from_slice(&other_labels);
-                        labels.dedup();
-
-                        println!("  }}");
-
-                        Node::Existing {
-                            name: name.clone(),
-                            proplist: proplist,
-                            children: children,
-                            labels: labels,
-                            offset: 0,
                         }
                     }
-                    Node::Deleted { ref name, .. } => {
-                        println!("- {} {{ ... }}", name);
-                        Node::Deleted { name: name.clone(), offset: 0 }
+                }
+                for prop in other_plist {
+                    let new_name = prop.name();
+                    if !self_plist.iter().any(|p| p.name() == new_name) {
+                        match *prop {
+                            Property::Deleted { ref name, .. } => {
+                                println!("// Property {} deleted without existing", name);
+                            }
+                            Property::Existing { .. } => {
+                                println!("+     {}", prop);
+                                proplist.push(prop.clone());
+                            }
+                        }
                     }
+                }
+
+                let mut children = Vec::new();
+                for old_child in self_c {
+                    let old_name = old_child.name();
+                    let new_node = other_c.iter().find(|c| c.name() == old_name);
+
+                    match (new_node, old_child) {
+                        (None, &Node::Existing { ref name, .. }) => {
+                            println!("      {} {{ ... }}", name);
+                            children.push(old_child.clone());
+                        }
+                        (Some(node @ &Node::Existing { .. }), _) => {
+                            if let Node::Existing { .. } = *old_child {
+                                println!("      {} {{ ... }}", node.name());
+                            } else {
+                                println!("+     {} {{ ... }}", node.name());
+                            }
+                            children.push(node.clone());
+                        }
+                        (Some(&Node::Deleted { ref name, .. }), &Node::Existing { .. }) => {
+                            println!("-     {} {{ ... }}", name)
+                        }
+                        _ => {}
+                    }
+                }
+                for child in other_c {
+                    let new_name = child.name();
+                    if !self_c.iter().any(|c| c.name() == new_name) {
+                        match *child {
+                            Node::Deleted { ref name, .. } => {
+                                println!("// Node {} deleted without existing", name);
+                            }
+                            Node::Existing { ref name, ..} => {
+                                println!("+     {} {{ ... }}", name);
+                                children.push(child.clone())
+                            }
+                        }
+                    }
+                }
+
+                let mut labels = self_labels.clone();
+                labels.extend_from_slice(&other_labels);
+                labels.sort();
+                labels.dedup();
+
+                println!("  }}");
+
+                Node::Existing {
+                    name: name.clone(),
+                    proplist: proplist,
+                    children: children,
+                    labels: labels,
+                    offset: 0,
                 }
             }
-            Node::Deleted { ref name, .. } => {
-                match *other {
-                    Node::Existing { ref proplist, ref children, ref labels, .. } => {
-                        println!("+ {} {{", name);
-                        for prop in proplist {
-                            println!("+     {}", prop);
+            (&Node::Existing { .. }, &Node::Deleted { ref name, .. }) => {
+                println!("- {} {{ ... }}", name);
+                Node::Deleted { name: name.clone(), offset: 0 }
+            }
+            (&Node::Deleted { ref name, .. },
+             &Node::Existing { ref proplist, ref children, ref labels, .. }) => {
+                println!("+ {} {{", name);
+                for prop in proplist {
+                    println!("+     {}", prop);
+                }
+                for node in children {
+                    match *node {
+                        Node::Deleted { ref name, .. } => {
+                            println!("+     // Node {} deleted", name)
                         }
-                        for node in children {
-                            match *node {
-                                Node::Deleted { ref name, .. } => {
-                                    println!("+     // Node {} deleted", name)
-                                }
-                                Node::Existing { ref name, .. } => {
-                                    println!("+     {} {{ ... }}", name)
-                                }
-                            }
+                        Node::Existing { ref name, .. } => {
+                            println!("+     {} {{ ... }}", name)
                         }
-                        println!("+ }}");
-
-                        Node::Existing {
-                            name: NodeName::Full(name.clone()),
-                            proplist: proplist.clone(),
-                            children: children.clone(),
-                            labels: labels.clone(),
-                            offset: 0,
-                        }
-                    }
-                    Node::Deleted { .. } => {
-                        println!("// Node {} deleted without existing", name);
-                        Node::Deleted { name: name.clone(), offset: 0 }
                     }
                 }
+                println!("+ }}");
+
+                Node::Existing {
+                    name: NodeName::Full(name.clone()),
+                    proplist: proplist.clone(),
+                    children: children.clone(),
+                    labels: labels.clone(),
+                    offset: 0,
+                }
+            }
+            (&Node::Deleted { ref name, .. }, &Node::Deleted { .. }) => {
+                println!("// Node {} deleted without existing", name);
+                Node::Deleted { name: name.clone(), offset: 0 }
             }
         }
     }
@@ -390,8 +382,34 @@ impl Offset for Property {
 }
 
 impl Diff for Property {
+    // TODO: print labels
     fn diff(&self, other: &Self) -> Self {
-        unimplemented!()
+        use Property::{Deleted, Existing};
+        if self == other {
+            if let Deleted { ref name, .. } = *self {
+                println!("// Property {} deleted without existing", name);
+            } else {
+                println!("  {}", self);
+            }
+        } else {
+            if let Existing { .. } = *self {
+                println!("- {}", self);
+            }
+            if let Existing { .. } = *other {
+                println!("+ {}", other);
+            }
+        }
+
+        let mut prop = self.clone();
+        match (&mut prop, other) {
+            (&mut Existing { ref mut labels, .. }, &Existing { labels: ref other, .. }) => {
+                labels.extend_from_slice(&other);
+                labels.sort();
+                labels.dedup();
+            }
+            _ => {}
+        }
+        prop
     }
 }
 
