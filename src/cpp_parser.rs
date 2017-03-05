@@ -7,7 +7,7 @@ use std::iter::Peekable;
 use nom::IResult;
 
 use inner_tree::*;
-use dts_parser::parse_include;
+use device_tree_source::parse_include;
 
 #[derive(Debug)]
 pub enum LinemarkerFlag {

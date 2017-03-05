@@ -1,11 +1,10 @@
-#[macro_use]
 extern crate nom;
+extern crate device_tree_source;
 #[macro_use]
 extern crate clap;
 
 mod inner_tree;
 mod cpp_parser;
-mod dts_parser;
 mod change_tracker;
 
 use std::process::Command;
@@ -15,7 +14,7 @@ use std::io::{self, BufRead, Write};
 // use std::fs::File;
 
 use cpp_parser::parse_cpp_outputs;
-use dts_parser::{Offset, parse_dt};
+use device_tree_source::{Offset, parse_dt};
 use change_tracker::LabelStore;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";

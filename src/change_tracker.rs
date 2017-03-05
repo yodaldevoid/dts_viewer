@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use dts_parser::{BootInfo, Node, NodeName, Property, Element};
+use device_tree_source::{BootInfo, Node, NodeName, Property, Element};
 
 #[derive(Debug)]
 pub struct LabelStore<'a> {

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate nom;
+
 use std::str::{self, FromStr};
 use std::num::ParseIntError;
 use std::fmt;
@@ -304,7 +307,7 @@ named!(eat_junk,
 
 macro_rules! comments_ws (
     ($i:expr, $($args:tt)*) => ( {
-        use $crate::dts_parser::eat_junk;
+        use $crate::eat_junk;
         sep!($i, eat_junk, $($args)*)
     } )
 );
@@ -753,10 +756,10 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
         char!('"')
     ) |
     do_parse!(
-        bits: opt!(comments_ws!(preceded!(
+        bits: opt!(complete!(comments_ws!(preceded!(
             tag!("/bits/"),
             flat_map!(take_until!("<"), integer)
-        ))) >>
+        )))) >>
         char!('<') >>
         val: separated_nonempty_list!(eat_junk, apply!(parse_cell, bits.unwrap_or(32) as usize)) >>
         char!('>') >>
@@ -1170,3 +1173,4 @@ mod tests {
         );
     }
 }
+
