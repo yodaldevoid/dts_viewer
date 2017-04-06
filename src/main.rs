@@ -12,6 +12,7 @@ use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs::remove_file;
 use std::io::{self, BufRead, Write};
+// use std::fs::File;
 
 use cpp_parser::parse_cpp_outputs;
 use dts_parser::{Offset, parse_dt};
@@ -94,8 +95,11 @@ fn main() {
         println!("Failed to delete temp file: {:?}", e);
     }
 
-    println!("{}", include_tree);
-    // println!("{}", String::from_utf8_lossy(&buffer));
+    println!("{:#?}", include_tree);
+    // {
+    //     let mut total_dts_dump = File::create("total_dts_dump.dts").unwrap();
+    //     total_dts_dump.write_all(&buffer).unwrap()
+    // }
 
     let (boot_info, ammends) = match parse_dt(&buffer) {
         Ok(dt) => dt,
