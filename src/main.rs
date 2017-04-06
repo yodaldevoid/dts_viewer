@@ -50,7 +50,7 @@ fn main() {
     let file = Path::new(file_name);
     let parent = file.parent().expect("Could not get parent directory of file");
 
-    let mut cpp_command = Command::new("arm-linux-gnueabi-gcc");
+    let mut cpp_command = Command::new("gcc");
     cpp_command.args(&["-H", "-E", "-nostdinc"])
         .args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
         .args(&["-o", CPP_OUTPUT_NAME])
