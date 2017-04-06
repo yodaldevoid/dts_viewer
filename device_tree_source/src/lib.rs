@@ -54,7 +54,11 @@ impl PartialOrd for IncludeBounds {
 
 impl Ord for IncludeBounds {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.global_start.cmp(&other.global_start)
+        use std::cmp::Ordering::*;
+        match self.global_start.cmp(&other.global_start) {
+            Equal => self.global_end().cmp(&other.global_end()),
+            o => o,
+        }
     }
 }
 
