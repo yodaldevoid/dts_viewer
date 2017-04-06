@@ -3,8 +3,6 @@ extern crate device_tree_source;
 #[macro_use]
 extern crate clap;
 
-mod inner_tree;
-mod cpp_parser;
 mod change_tracker;
 
 use std::process::Command;
@@ -16,7 +14,9 @@ use std::io::{self, BufRead, Write};
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
 
-use cpp_parser::parse_cpp_outputs;
+use device_tree_source::IncludeBounds;
+use device_tree_source::include_files;
+
 use change_tracker::LabelStore;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
@@ -83,20 +83,19 @@ fn main() {
         return;
     }
 
-    let (include_tree, buffer) =
-        match parse_cpp_outputs(&cpp_stderr, Path::new(CPP_OUTPUT_NAME), file_name) {
-            Ok(v) => v,
-            Err(e) => {
-                println!("{}", e);
-                return;
-            }
-        };
+    let (buffer, bounds) = match include_files(Path::new(CPP_OUTPUT_NAME), 0) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("{}", e);
+            return;
+        }
+    };
 
     if let Err(e) = remove_file(Path::new(CPP_OUTPUT_NAME)) {
         println!("Failed to delete temp file: {:?}", e);
     }
 
-    println!("{:#?}", include_tree);
+    // println!("{:#?}", bounds);
     // {
     //     let mut total_dts_dump = File::create("total_dts_dump.dts").unwrap();
     //     total_dts_dump.write_all(&buffer).unwrap()
@@ -184,17 +183,28 @@ fn main() {
                     for change in changes {
                         let offset = change.get_offset();
                         // println!("Start offset: {}", offset);
-                        match include_tree.file_from_offset(offset) {
-                            Ok(file) => {
-                                print!("File: {}", file.path.to_string_lossy());
-                                match include_tree.file_line_from_global(&buffer, offset) {
+                        match bounds.binary_search_by(|b| {
+                            use std::cmp::Ordering::*;
+                            match (b.global_start.cmp(&offset), b.global_end().cmp(&offset)) {
+                                (Less, Greater) | (Equal, Greater) => Equal,
+                                (Greater, Greater) => Greater,
+                                (Equal, Less) | (Less, Less) | (Less, Equal) | (Equal, Equal)
+                                    => Less,
+                                _ => unreachable!(),
+                            }
+                        }) {
+                            Ok(off) => {
+                                let bound = &bounds[off];
+                                print!("File: {}", bound.path.to_string_lossy());
+
+                                match bound.file_line_from_global(&buffer, offset) {
                                     Ok((line, col)) => {
                                         println!(", Line: {}, Column: {}", line, col)
                                     }
-                                    Err(err) => println!("{}", err),
+                                    Err(err) => println!(" {}", err),
                                 }
                             }
-                            Err(err) => println!("{}", err),
+                            Err(_) => println!("Could not find file for offset {}", offset),
                         }
                         println!("{}\n", change);
                     }

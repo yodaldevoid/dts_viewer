@@ -104,6 +104,53 @@ impl IncludeBounds {
         bounds.extend_from_slice(&remainders);
         bounds.sort();
     }
+
+    pub fn file_line_from_global(&self,
+                                 global_buffer: &[u8],
+                                 offset: usize)
+                                 -> Result<(usize, usize), String> {
+        if offset >= self.global_start && offset < self.global_end() {
+            match self.method {
+                IncludeMethod::DTS => {
+                    File::open(&self.path)
+                        .map_err(|e| e.to_string())
+                        .map(|f| f.bytes().filter_map(|e| e.ok()))
+                        .map(|b| byte_offset_to_line_col(b, offset -
+                                                            self.global_start +
+                                                            self.child_start))
+                }
+                IncludeMethod::CPP => {
+                    let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset);
+                    let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
+                                                                  self.global_start);
+                    let (c_line, c_col) = File::open(&self.path)
+                                              .map_err(|e| e.to_string())
+                                              .map(|f| f.bytes().filter_map(|e| e.ok()))
+                                              .map(|b| byte_offset_to_line_col(b,
+                                                                               self.child_start))?;
+
+                    // println!();
+                    // println!("global_start: {}, child_start: {}",
+                    //          self.global_start, self.child_start);
+                    // println!("g_line: {}, s_line: {}, c_line: {}", g_line, s_line, c_line);
+                    // println!("g_col: {}, s_col: {}, c_col: {}", g_col, s_col, c_col);
+
+                    let line = g_line - s_line + c_line;
+                    //TODO: find more rigorous way of testing this
+                    let col = if g_line == s_line {
+                        g_col - s_col - c_col + 2
+                    } else {
+                        g_col - c_col + 1
+                    };
+
+                    Ok((line, col))
+                }
+            }
+        } else {
+            Err(format!("Offset ({}) not within bounds, start: {} end: {}",
+                        offset, self.global_start, self.global_end()))
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
