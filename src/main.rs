@@ -13,8 +13,10 @@ use std::fs::remove_file;
 use std::io::{self, BufRead, Write};
 // use std::fs::File;
 
+use device_tree_source::parser::parse_dt;
+use device_tree_source::tree::Offset;
+
 use cpp_parser::parse_cpp_outputs;
-use device_tree_source::{Offset, parse_dt};
 use change_tracker::LabelStore;
 
 const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";

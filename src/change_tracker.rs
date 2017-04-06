@@ -1,7 +1,32 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::fmt;
 
-use device_tree_source::{BootInfo, Node, NodeName, Property, Element};
+use device_tree_source::tree::{BootInfo, Node, NodeName, Property, Offset};
+
+#[derive(Debug)]
+pub enum Element<'a> {
+    Node(&'a Node),
+    Prop(&'a Property),
+}
+
+impl<'a> Offset for Element<'a> {
+    fn get_offset(&self) -> usize {
+        match *self {
+            Element::Node(n) => n.get_offset(),
+            Element::Prop(p) => p.get_offset(),
+        }
+    }
+}
+
+impl<'a> fmt::Display for Element<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Element::Node(node) => write!(f, "{}", node),
+            Element::Prop(prop) => write!(f, "{}", prop),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct LabelStore<'a> {
