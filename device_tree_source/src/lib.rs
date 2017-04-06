@@ -319,7 +319,7 @@ pub fn line_to_byte_offset<K, I>(bytes: I, line: usize) -> Result<usize, String>
         bytes.enumerate()
             .filter(|&(_, ref byte)| byte.borrow() == &b'\n')
             .nth(line - 2)
-            .map(|(offset, _)| offset)
+            .map(|(offset, _)| offset + 1)
             .ok_or_else(|| "Failed converting from line to byte offset".to_string())
     }
 }
@@ -329,7 +329,7 @@ pub fn byte_offset_to_line_col<K, I>(bytes: I, offset: usize) -> (usize, usize)
           I: Iterator<Item = K>
 {
     let opt = bytes.enumerate()
-        .filter(|&(off, ref byte)| off <= offset && byte.borrow() == &b'\n')
+        .filter(|&(off, ref byte)| off < offset && byte.borrow() == &b'\n')
         .map(|(start, _)| start)
         .enumerate()
         .last();
@@ -347,24 +347,28 @@ mod tests {
 
     #[test]
     fn lines_to_bytes() {
-        let string = "Howdy\nHow goes it\nI'm doing fine\n";
+        let string = "Howdy\nHow goes it\n\nI'm doing fine\n";
         assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 1).unwrap(),
                    0);
         assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 2).unwrap(),
-                   5);
+                   6);
         assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 3).unwrap(),
-                   17);
+                   18);
+        assert_eq!(line_to_byte_offset(string.as_bytes().iter(), 4).unwrap(),
+                   19);
     }
 
     #[test]
     fn bytes_to_lines() {
-        let string = "Howdy\nHow goes it\nI'm doing fine\n";
+        let string = "Howdy\nHow goes it\n\nI'm doing fine\n";
         assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 0),
                    (1, 1));
         assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 8),
                    (2, 3));
         assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 20),
-                   (3, 3));
+                   (4, 2));
+        assert_eq!(byte_offset_to_line_col(string.as_bytes().iter(), 18),
+                   (3, 1));
     }
 
     #[test]
