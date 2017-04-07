@@ -14,8 +14,8 @@ use std::io::{self, BufRead, Write};
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
 
-use device_tree_source::IncludeBounds;
-use device_tree_source::include_files;
+use device_tree_source::include::IncludeBounds;
+use device_tree_source::include::include_files;
 
 use change_tracker::LabelStore;
 
