@@ -2,6 +2,10 @@
 name = "device_tree_source"
 version = "0.1.0"
 authors = ["Gabriel Smith <ga29smith@gmail.com>"]
+description = "A library to parse Device Tree Source (DTS) files."
+license = "MIT"
+categories = ["parser-implementations"]
+repository = "https://github.com/yodaldevoid/dts_viewer"
 
 [dependencies]
 nom = { version = "^2.1", features = ["verbose-errors"] }
