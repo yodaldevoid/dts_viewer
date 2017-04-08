@@ -1,6 +1,6 @@
 use std::fmt;
 
-trait Labeled {
+pub trait Labeled {
     fn add_label(&mut self, label: &str);
 }
 
