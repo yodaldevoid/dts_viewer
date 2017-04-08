@@ -93,7 +93,7 @@ fn main() {
     };
 
     if let Err(e) = remove_file(Path::new(CPP_OUTPUT_NAME)) {
-        println!("Failed to delete temp file: {:?}", e);
+        println!("-- Failed to delete temp file: {:?}", e);
     }
 
     // println!("{:#?}", bounds);
@@ -212,7 +212,7 @@ fn main() {
                                     Err(err) => println!(" {}", err),
                                 }
                             }
-                            Err(_) => println!("Could not find file for offset {}", offset),
+                            Err(_) => println!("-- Could not find file for offset {}", offset),
                         }
                         println!("{}\n", change);
                     }
