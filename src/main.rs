@@ -9,13 +9,14 @@ use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs::remove_file;
 use std::io::{self, BufRead, Write};
+use std::iter::Iterator;
+use std::fmt::{self, Display, Formatter};
 // use std::fs::File;
 
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
 
-use device_tree_source::include::IncludeBounds;
-use device_tree_source::include::include_files;
+use device_tree_source::include::{IncludeBounds, IncludeMethod, include_files};
 
 use change_tracker::LabelStore;
 
@@ -100,6 +101,13 @@ fn main() {
     //     let mut total_dts_dump = File::create("total_dts_dump.dts").unwrap();
     //     total_dts_dump.write_all(&buffer).unwrap()
     // }
+
+    let include_tree = IncludeTree::bounds_to_tree(&bounds);
+    if let Some(tree) = include_tree {
+        println!("{}", tree);
+    } else {
+        println!("-- Could not constuct include tree from bounds!");
+    }
 
     let (boot_info, ammends) = match parse_dt(&buffer) {
         Ok(dt) => dt,
@@ -212,5 +220,58 @@ fn main() {
                 None => println!("Nothing at path"),
             }
         }
+    }
+}
+
+#[derive(Debug)]
+struct IncludeTree {
+    path: PathBuf,
+    method: IncludeMethod,
+    includes: Vec<IncludeTree>,
+}
+
+impl IncludeTree {
+    fn bounds_to_tree(bounds: &[IncludeBounds]) -> Option<IncludeTree> {
+        if let Some(first) = bounds.first() {
+            let mut tree = IncludeTree {
+                path: first.path.clone(),
+                includes: Vec::new(),
+                method: first.method.clone(),
+            };
+
+            //TODO: we don't really need the filter, benchmark speed w/wo
+            for sub_bounds in bounds.split(|b| b.path == first.path)
+                                    .filter(|s| !s.is_empty()) {
+                if let Some(sub_tree) = Self::bounds_to_tree(sub_bounds) {
+                    tree.includes.push(sub_tree);
+                }
+            }
+
+            Some(tree)
+        } else {
+            None
+        }
+    }
+
+    fn write(&self, f: &mut Formatter, prefix: &str) -> fmt::Result {
+        let mut next_prefix = prefix.to_string();
+        next_prefix.push_str(" |-");
+
+        let method = match self.method {
+            IncludeMethod::CPP => "CPP",
+            IncludeMethod::DTS => "DTS",
+        };
+        writeln!(f, "{} {}: {}", prefix, self.path.to_string_lossy(), method)?;
+        for t in &self.includes {
+            t.write(f, &next_prefix)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Display for IncludeTree {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        self.write(f, "")
     }
 }
