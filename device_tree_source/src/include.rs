@@ -132,21 +132,21 @@ impl IncludeBounds {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Linemarker {
+struct Linemarker {
     child_line: usize,
     path: PathBuf,
     flag: Option<LinemarkerFlag>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum LinemarkerFlag {
+enum LinemarkerFlag {
     Start,
     Return,
     System,
     Extern,
 }
 
-named!(pub parse_linemarker<Linemarker>,
+named!(parse_linemarker<Linemarker>,
     complete!(do_parse!(
         tag!("#") >>
         opt!(tag!("line")) >>
@@ -235,7 +235,7 @@ fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset:
     }
 }
 
-named!(pub parse_include<String>, preceded!(
+named!(parse_include<String>, preceded!(
     tag!("/include/"),
     preceded!( multispace,
         delimited!(
@@ -245,7 +245,7 @@ named!(pub parse_include<String>, preceded!(
         ))
 ));
 
-named!(pub find_include<(&[u8], String)>, do_parse!(
+named!(find_include<(&[u8], String)>, do_parse!(
     pre: take_until!("/include/") >>
     path: parse_include >>
     (pre, path)

@@ -164,7 +164,7 @@ enum Token {
     Paren,
 }
 
-pub fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
+fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
     let mut stack = Vec::new();
     // println!("Input: {:?}", String::from_utf8_lossy(&input[..20]));
     let mut buf = input;
@@ -442,7 +442,7 @@ named!(escape_c_char<u8>, alt!(
     take!(1) => { |c: &[u8]| c[0] }
 ));
 
-pub fn parse_cell(input: &[u8], bits: usize) -> IResult<&[u8], (u64, Option<String>)> {
+fn parse_cell(input: &[u8], bits: usize) -> IResult<&[u8], (u64, Option<String>)> {
     if bits != 8 && bits != 16 && bits != 32 && bits != 64 {
         return IResult::Error(error_position!(ErrorKind::Custom(1), input));
     }
@@ -484,7 +484,7 @@ named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
 
 // TODO: labels in data
 // TODO: include binary
-named!(pub parse_data<Data>, comments_ws!(alt!(
+named!(parse_data<Data>, comments_ws!(alt!(
     delimited!(
         char!('"'),
         do_parse!(
@@ -515,7 +515,7 @@ named!(pub parse_data<Data>, comments_ws!(alt!(
     do_parse!(val: parse_ref >> (Data::Reference(val)))
 )));
 
-named_args!(pub parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
+named_args!(parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
     do_parse!(
         offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         tag!("/delete-property/") >>
