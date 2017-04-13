@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 use std::str::{self, FromStr};
 use std::path::{PathBuf, Path};
 use std::fs::File;
@@ -95,17 +97,17 @@ impl IncludeBounds {
                         .map(|f| f.bytes().filter_map(|e| e.ok()))
                         .map(|b| byte_offset_to_line_col(b, offset -
                                                             self.global_start +
-                                                            self.child_start))
+                                                            self.child_start).unwrap()) //TODO: unwraps
                 }
                 IncludeMethod::CPP => {
-                    let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset);
+                    let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset).unwrap(); //TODO: unwraps
                     let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
-                                                                  self.global_start);
+                                                                  self.global_start).unwrap(); //TODO: unwraps
                     let (c_line, c_col) = File::open(&self.path)
                                               .map_err(|e| e.to_string())
                                               .map(|f| f.bytes().filter_map(|e| e.ok()))
                                               .map(|b| byte_offset_to_line_col(b,
-                                                                               self.child_start))?;
+                                                                               self.child_start).unwrap())?; //TODO: unwraps
 
                     // println!();
                     // println!("global_start: {}, child_start: {}",
