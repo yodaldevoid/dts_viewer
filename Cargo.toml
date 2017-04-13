@@ -11,6 +11,5 @@ repository = "https://github.com/yodaldevoid/dts_viewer"
 [workspace]
 
 [dependencies]
-nom = { version = "^2", features = ["verbose-errors"] }
 device_tree_source = { path = "device_tree_source", version = "^0.1" }
 clap = "^2"

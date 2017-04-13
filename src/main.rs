@@ -1,4 +1,3 @@
-extern crate nom;
 extern crate device_tree_source;
 #[macro_use]
 extern crate clap;

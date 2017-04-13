@@ -4,7 +4,6 @@ version = "0.2.0"
 dependencies = [
  "clap 2.20.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "device_tree_source 0.1.0",
- "nom 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
