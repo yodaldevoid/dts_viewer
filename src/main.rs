@@ -84,7 +84,7 @@ fn main() {
         return;
     }
 
-    let (buffer, bounds) = match include_files(Path::new(CPP_OUTPUT_NAME), 0) {
+    let (buffer, bounds) = match include_files(Path::new(CPP_OUTPUT_NAME)) {
         Ok(x) => x,
         Err(e) => {
             println!("{}", e);

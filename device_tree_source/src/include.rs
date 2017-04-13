@@ -253,100 +253,104 @@ named!(find_include<(&[u8], String)>, do_parse!(
     (pre, path)
 ));
 
-pub fn include_files(path: &Path,
-                     main_offset: usize)
-                     -> Result<(Vec<u8>, Vec<IncludeBounds>), String> {
-    // TODO: check from parent directory of root file
-    let mut file = File::open(path).unwrap();
-    let mut buffer: Vec<u8> = Vec::new();
-    let mut bounds: Vec<IncludeBounds> = Vec::new();
+pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), String> {
+    fn _include_files(path: &Path,
+                      main_offset: usize)
+                      -> Result<(Vec<u8>, Vec<IncludeBounds>), String> {
+        // TODO: check from parent directory of root file
+        let mut file = File::open(path).unwrap(); //TODO: unwrap
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut bounds: Vec<IncludeBounds> = Vec::new();
 
-    let mut string_buffer = String::new();
-    file.read_to_string(&mut string_buffer).map_err(|_| "IO Error".to_string())?;
+        let mut string_buffer = String::new();
+        file.read_to_string(&mut string_buffer).map_err(|_| "IO Error".to_string())?;
 
-    let mut buf = string_buffer.as_bytes();
+        let mut buf = string_buffer.as_bytes();
 
-    named!(first_linemarker<(&[u8], Linemarker)>,
-        do_parse!(
-            marker: peek!(parse_linemarker) >>
-            line: recognize!(parse_linemarker) >>
-            (line, marker)
-        )
-    );
+        named!(first_linemarker<(&[u8], Linemarker)>,
+            do_parse!(
+                marker: peek!(parse_linemarker) >>
+                line: recognize!(parse_linemarker) >>
+                (line, marker)
+            )
+        );
 
-    let start_bound = if let IResult::Done(rem, (line, marker)) = first_linemarker(buf) {
-        let bound = IncludeBounds {
-            path: marker.path.clone(),
-            global_start: buf.len() - rem.len(),
-            // TODO: check from parent directory of root file
-            child_start: File::open(&marker.path)
-                             .map(|f| f.bytes().filter_map(|e| e.ok()))
-                             .map(|b| line_to_byte_offset(b, marker.child_line).unwrap()) //TODO: unwraping is bad, SOK?
-                             .unwrap_or(0),
-            len: File::open(&marker.path).unwrap().bytes().count(),
-            method: IncludeMethod::CPP,
+        let start_bound = if let IResult::Done(rem, (line, marker)) = first_linemarker(buf) {
+            let bound = IncludeBounds {
+                path: marker.path.clone(),
+                global_start: buf.len() - rem.len(),
+                // TODO: check from parent directory of root file
+                child_start: File::open(&marker.path)
+                                 .map(|f| f.bytes().filter_map(|e| e.ok()))
+                                 .map(|b| line_to_byte_offset(b, marker.child_line).unwrap()) //TODO: unwraping is bad, SOK?
+                                 .unwrap_or(0),
+                len: File::open(&marker.path).unwrap().bytes().count(), //TODO: unwrap
+                method: IncludeMethod::CPP,
+            };
+
+            buffer.extend_from_slice(line);
+            buf = rem;
+
+            bound
+        } else {
+            // println!("main_offset {}", main_offset);
+            IncludeBounds {
+                path: path.to_path_buf(),
+                global_start: main_offset,
+                child_start: 0,
+                // TODO: check from parent directory of root file
+                len: File::open(path).unwrap().bytes().count(), //TODO: unwrap
+                method: IncludeMethod::DTS,
+            }
         };
+        bounds.push(start_bound);
 
-        buffer.extend_from_slice(line);
-        buf = rem;
+        while let IResult::Done(rem, (pre, file)) = find_include(&buf[..]) {
+            parse_linemarkers(pre, &mut bounds, buffer.len());
+            buffer.extend_from_slice(pre);
 
-        bound
-    } else {
-        // println!("main_offset {}", main_offset);
-        IncludeBounds {
-            path: path.to_path_buf(),
-            global_start: main_offset,
-            child_start: 0,
-            // TODO: check from parent directory of root file
-            len: File::open(path).unwrap().bytes().count(),
-            method: IncludeMethod::DTS,
+            let offset = pre.len();
+            // println!("{}", file);
+            // println!("Offset: {}", offset);
+            // println!("{}", include_tree);
+
+            let included_path = Path::new(&file);
+            let total_len = buffer.len() + main_offset; // - 1;
+            let (sub_buf, sub_bounds) = _include_files(included_path, total_len)?;
+            buffer.extend(sub_buf);
+
+            let inc_start = sub_bounds.first()
+                                      .map(|b| b.global_start)
+                                      .expect(&format!("No bounds returned: {}",
+                                                      included_path.to_string_lossy())); //TODO: return Err
+            let inc_end = sub_bounds.last()
+                                    .map(|b| b.global_end())
+                                    .expect(&format!("No bounds returned: {}",
+                                                    included_path.to_string_lossy())); //TODO: return Err
+            let eaten_len = (buf.len() - offset) - rem.len();
+            //include_tree.offset_after_location(inc_start,
+            //                                   inc_end as isize - inc_start as isize -
+            //                                   eaten_len as isize);
+            // println!("After offset");
+            // println!("{}", include_tree);
+            IncludeBounds::split_bounds(&mut bounds, inc_start, inc_end, eaten_len);
+            bounds.extend_from_slice(&sub_bounds);
+            bounds.sort();
+
+            // println!("After split");
+            // println!("{}", include_tree);
+
+            buf = rem;
         }
-    };
-    bounds.push(start_bound);
 
-    while let IResult::Done(rem, (pre, file)) = find_include(&buf[..]) {
-        parse_linemarkers(pre, &mut bounds, buffer.len());
-        buffer.extend_from_slice(pre);
+        // no more includes, just add the rest and return
+        parse_linemarkers(buf, &mut bounds, buffer.len());
+        buffer.extend(buf);
 
-        let offset = pre.len();
-        // println!("{}", file);
-        // println!("Offset: {}", offset);
-        // println!("{}", include_tree);
-
-        let included_path = Path::new(&file);
-        let total_len = buffer.len() + main_offset; // - 1;
-        let (sub_buf, sub_bounds) = include_files(included_path, total_len)?;
-        buffer.extend(sub_buf);
-
-        let inc_start = sub_bounds.first()
-                                  .map(|b| b.global_start)
-                                  .expect(&format!("No bounds returned: {}",
-                                                  included_path.to_string_lossy()));
-        let inc_end = sub_bounds.last()
-                                .map(|b| b.global_end())
-                                .expect(&format!("No bounds returned: {}",
-                                                included_path.to_string_lossy()));
-        let eaten_len = (buf.len() - offset) - rem.len();
-        //include_tree.offset_after_location(inc_start,
-        //                                   inc_end as isize - inc_start as isize -
-        //                                   eaten_len as isize);
-        // println!("After offset");
-        // println!("{}", include_tree);
-        IncludeBounds::split_bounds(&mut bounds, inc_start, inc_end, eaten_len);
-        bounds.extend_from_slice(&sub_bounds);
-        bounds.sort();
-
-        // println!("After split");
-        // println!("{}", include_tree);
-
-        buf = rem;
+        Ok((buffer, bounds))
     }
 
-    // no more includes, just add the rest and return
-    parse_linemarkers(buf, &mut bounds, buffer.len());
-    buffer.extend(buf);
-
-    Ok((buffer, bounds))
+    _include_files(path, 0)
 }
 
 #[cfg(test)]
