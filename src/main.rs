@@ -15,7 +15,7 @@ use std::fmt::{self, Display, Formatter};
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
 
-use device_tree_source::include::{IncludeBounds, IncludeMethod, include_files};
+use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, include_files};
 
 use change_tracker::LabelStore;
 
@@ -86,7 +86,13 @@ fn main() {
     let (buffer, bounds) = match include_files(Path::new(CPP_OUTPUT_NAME)) {
         Ok(x) => x,
         Err(e) => {
-            println!("{}", e);
+            match e {
+                IncludeError::IOError(err) => println!("IO error while trying to open file: {}", err),
+                IncludeError::LinemarkerInDtsi => println!("Extraneous linemarker found in DT include."),
+                IncludeError::ParseError(_) => println!("Failed to convert line to byte offset for bounds tracking."),
+                IncludeError::NoBoundReturned(path) => println!("No bounds returned after parsing file: {}", path.to_string_lossy()),
+                _ => unreachable!(),
+            }
             return;
         }
     };
@@ -208,7 +214,20 @@ fn main() {
                                     Ok((line, col)) => {
                                         println!(", Line: {}, Column: {}", line, col)
                                     }
-                                    Err(err) => println!(" {}", err),
+                                    Err(err) => match err {
+                                        IncludeError::ParseError(_) =>
+                                            println!("Offset ({}) could not be converted to line.",
+                                                     offset),
+                                        IncludeError::IOError(_) =>
+                                            println!("Failed to open file: {}",
+                                                     bound.path.to_string_lossy()),
+                                        IncludeError::NotInBounds =>
+                                            println!("File offset ({}) was supposed to be in\
+                                                         bound. {:?}",
+                                                     offset,
+                                                     bound),
+                                        _ => unreachable!(),
+                                    }
                                 }
                             }
                             Err(_) => println!("-- Could not find file for offset {}", offset),

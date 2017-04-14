@@ -3,13 +3,34 @@
 use std::str::{self, FromStr};
 use std::path::{PathBuf, Path};
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, Read};
 use std::cmp::Ordering;
 
 use nom::{IResult, ErrorKind, Needed, FindSubstring, digit, space, multispace, line_ending};
 
 use parser::escape_c_string;
 use ::{byte_offset_to_line_col, line_to_byte_offset};
+
+#[derive(Debug)]
+pub enum IncludeError {
+    NotInBounds,
+    NoBoundReturned(PathBuf), // No bounds returned from sub include_files
+    LinemarkerInDtsi, // Linemarker found within DTS include
+    IOError(io::Error),
+    ParseError(::ParseError)
+}
+
+impl From<io::Error> for IncludeError {
+    fn from(err: io::Error) -> Self {
+        IncludeError::IOError(err)
+    }
+}
+
+impl From<::ParseError> for IncludeError {
+    fn from(err: ::ParseError) -> Self {
+        IncludeError::ParseError(err)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncludeBounds {
@@ -88,26 +109,20 @@ impl IncludeBounds {
     pub fn file_line_from_global(&self,
                                  global_buffer: &[u8],
                                  offset: usize)
-                                 -> Result<(usize, usize), String> {
+                                 -> Result<(usize, usize), IncludeError> {
         if offset >= self.global_start && offset < self.global_end() {
             match self.method {
                 IncludeMethod::DTS => {
-                    File::open(&self.path)
-                        .map_err(|e| e.to_string())
-                        .map(|f| f.bytes().filter_map(|e| e.ok()))
-                        .map(|b| byte_offset_to_line_col(b, offset -
-                                                            self.global_start +
-                                                            self.child_start).unwrap()) //TODO: unwraps
+                    let b = File::open(&self.path)?.bytes().filter_map(|e| e.ok());
+                    byte_offset_to_line_col(b, offset - self.global_start + self.child_start)
+                                            .map_err(|e| e.into())
                 }
                 IncludeMethod::CPP => {
-                    let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset).unwrap(); //TODO: unwraps
+                    let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset)?;
                     let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
-                                                                  self.global_start).unwrap(); //TODO: unwraps
-                    let (c_line, c_col) = File::open(&self.path)
-                                              .map_err(|e| e.to_string())
-                                              .map(|f| f.bytes().filter_map(|e| e.ok()))
-                                              .map(|b| byte_offset_to_line_col(b,
-                                                                               self.child_start).unwrap())?; //TODO: unwraps
+                                                                  self.global_start)?;
+                    let b = File::open(&self.path)?.bytes().filter_map(|e| e.ok());
+                    let (c_line, c_col) = byte_offset_to_line_col(b, self.child_start)?;
 
                     // println!();
                     // println!("global_start: {}, child_start: {}",
@@ -127,8 +142,7 @@ impl IncludeBounds {
                 }
             }
         } else {
-            Err(format!("Offset ({}) not within bounds, start: {} end: {}",
-                        offset, self.global_start, self.global_end()))
+            Err(IncludeError::NotInBounds)
         }
     }
 }
@@ -197,7 +211,8 @@ named!(find_linemarker<(&[u8], Linemarker)>, do_parse!(
     (pre, marker)
 ));
 
-fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset: usize) {
+fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset: usize)
+                     -> Result<(), IncludeError> {
     let end_offset = global_offset + buf.len();
     // println!("{}", str::from_utf8(buf).unwrap());
     let mut buf = buf;
@@ -208,25 +223,20 @@ fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset:
         // println!("pre.len() {}", pre.len());
 
         // double check that last bound was from a linemarker
-        match bounds.last() {
-            Some(&IncludeBounds { method: IncludeMethod::CPP, .. }) => {}
-            _ => {
-                println!("{:#?}", bounds);
-                panic!("Linemarker found within DTS include")
-            }
+        match bounds.last_mut() {
+            Some(ref mut bound) if bound.method == IncludeMethod::CPP => { bound.len = pre.len() }
+            Some(_) => return Err(IncludeError::LinemarkerInDtsi),
+            None => unreachable!(),
         }
-
-        // end last
-        bounds.last_mut().unwrap().len = pre.len();
 
         // start at new line
         let new_bound = IncludeBounds {
             path: marker.path.clone(),
             global_start: end_offset - rem.len(),
-            child_start: File::open(&marker.path)
-                            .map(|f| f.bytes().filter_map(|e| e.ok()))
-                            .map(|b| line_to_byte_offset(b, marker.child_line).unwrap()) //TODO: unwraping is bad, SOK?
-                            .unwrap_or(0),
+            child_start: match File::open(&marker.path) {
+                Ok(f) => line_to_byte_offset(f.bytes().filter_map(|e| e.ok()), marker.child_line)?,
+                Err(_) => 0,
+            },
             len: rem.len(),
             method: IncludeMethod::CPP,
         };
@@ -235,6 +245,8 @@ fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset:
 
         buf = rem;
     }
+
+    Ok(())
 }
 
 named!(parse_include<String>, preceded!(
@@ -253,17 +265,17 @@ named!(find_include<(&[u8], String)>, do_parse!(
     (pre, path)
 ));
 
-pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), String> {
+pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
     fn _include_files(path: &Path,
                       main_offset: usize)
-                      -> Result<(Vec<u8>, Vec<IncludeBounds>), String> {
+                      -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
         // TODO: check from parent directory of root file
-        let mut file = File::open(path).unwrap(); //TODO: unwrap
+        let mut file = File::open(path)?;
         let mut buffer: Vec<u8> = Vec::new();
         let mut bounds: Vec<IncludeBounds> = Vec::new();
 
         let mut string_buffer = String::new();
-        file.read_to_string(&mut string_buffer).map_err(|_| "IO Error".to_string())?;
+        file.read_to_string(&mut string_buffer)?;
 
         let mut buf = string_buffer.as_bytes();
 
@@ -280,11 +292,11 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Strin
                 path: marker.path.clone(),
                 global_start: buf.len() - rem.len(),
                 // TODO: check from parent directory of root file
-                child_start: File::open(&marker.path)
-                                 .map(|f| f.bytes().filter_map(|e| e.ok()))
-                                 .map(|b| line_to_byte_offset(b, marker.child_line).unwrap()) //TODO: unwraping is bad, SOK?
-                                 .unwrap_or(0),
-                len: File::open(&marker.path).unwrap().bytes().count(), //TODO: unwrap
+                child_start: {
+                    let b = File::open(&marker.path)?.bytes().filter_map(|e| e.ok());
+                    line_to_byte_offset(b, marker.child_line)?
+                },
+                len: File::open(&marker.path)?.bytes().count(),
                 method: IncludeMethod::CPP,
             };
 
@@ -299,14 +311,14 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Strin
                 global_start: main_offset,
                 child_start: 0,
                 // TODO: check from parent directory of root file
-                len: File::open(path).unwrap().bytes().count(), //TODO: unwrap
+                len: File::open(path)?.bytes().count(),
                 method: IncludeMethod::DTS,
             }
         };
         bounds.push(start_bound);
 
         while let IResult::Done(rem, (pre, file)) = find_include(&buf[..]) {
-            parse_linemarkers(pre, &mut bounds, buffer.len());
+            parse_linemarkers(pre, &mut bounds, buffer.len())?;
             buffer.extend_from_slice(pre);
 
             let offset = pre.len();
@@ -321,18 +333,12 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Strin
 
             let inc_start = sub_bounds.first()
                                       .map(|b| b.global_start)
-                                      .expect(&format!("No bounds returned: {}",
-                                                      included_path.to_string_lossy())); //TODO: return Err
+                                      .ok_or(IncludeError::NoBoundReturned(included_path.to_path_buf()))?;
             let inc_end = sub_bounds.last()
                                     .map(|b| b.global_end())
-                                    .expect(&format!("No bounds returned: {}",
-                                                    included_path.to_string_lossy())); //TODO: return Err
+                                    .ok_or(IncludeError::NoBoundReturned(included_path.to_path_buf()))?;
             let eaten_len = (buf.len() - offset) - rem.len();
-            //include_tree.offset_after_location(inc_start,
-            //                                   inc_end as isize - inc_start as isize -
-            //                                   eaten_len as isize);
-            // println!("After offset");
-            // println!("{}", include_tree);
+
             IncludeBounds::split_bounds(&mut bounds, inc_start, inc_end, eaten_len);
             bounds.extend_from_slice(&sub_bounds);
             bounds.sort();
@@ -344,7 +350,7 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Strin
         }
 
         // no more includes, just add the rest and return
-        parse_linemarkers(buf, &mut bounds, buffer.len());
+        parse_linemarkers(buf, &mut bounds, buffer.len())?;
         buffer.extend(buf);
 
         Ok((buffer, bounds))
