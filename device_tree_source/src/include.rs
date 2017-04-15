@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 use std::str::{self, FromStr};
 use std::path::{PathBuf, Path};
 use std::fs::File;
@@ -12,10 +10,28 @@ use parser::escape_c_string;
 use ::{byte_offset_to_line_col, line_to_byte_offset};
 
 #[derive(Debug)]
+pub enum BoundsError {
+    NotWithinBounds,
+    IOError(io::Error),
+    ParseError(::ParseError)
+}
+
+impl From<io::Error> for BoundsError {
+    fn from(err: io::Error) -> Self {
+        BoundsError::IOError(err)
+    }
+}
+
+impl From<::ParseError> for BoundsError {
+    fn from(err: ::ParseError) -> Self {
+        BoundsError::ParseError(err)
+    }
+}
+
+#[derive(Debug)]
 pub enum IncludeError {
-    NotInBounds,
     NoBoundReturned(PathBuf), // No bounds returned from sub include_files
-    LinemarkerInDtsi, // Linemarker found within DTS include
+    LinemarkerInDtsi(PathBuf), // Linemarker found within DTS include
     IOError(io::Error),
     ParseError(::ParseError)
 }
@@ -34,16 +50,20 @@ impl From<::ParseError> for IncludeError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncludeBounds {
-    pub path: PathBuf,
-    pub global_start: usize,
-    pub child_start: usize,
-    pub len: usize,
-    pub method: IncludeMethod,
+    path: PathBuf,
+    global_start: usize,
+    child_start: usize,
+    len: usize,
+    method: IncludeMethod,
 }
 
+/// Specifies the method used to include a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IncludeMethod {
+    /// File was included using the device tree specification's `/include/`
+    /// statement.
     DTS,
+    /// File was included using the C preprocessor.
     CPP,
 }
 
@@ -56,41 +76,80 @@ impl PartialOrd for IncludeBounds {
 impl Ord for IncludeBounds {
     fn cmp(&self, other: &Self) -> Ordering {
         use std::cmp::Ordering::*;
-        match self.global_start.cmp(&other.global_start) {
-            Equal => self.global_end().cmp(&other.global_end()),
+        match self.start().cmp(&other.start()) {
+            Equal => self.end().cmp(&other.end()),
             o => o,
         }
     }
 }
 
 impl IncludeBounds {
-    pub fn global_end(&self) -> usize {
+    /// Returns the path to the file which this bound maps to.
+    pub fn child_path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the start of the bound in the global buffer, in bytes.
+    ///
+    /// This is incluive and as such the byte at the returned offset is
+    /// part of this bound.
+    pub fn start(&self) -> usize {
+        self.global_start
+    }
+
+    /// Returns the end of the bound in the global buffer, in bytes.
+    ///
+    /// This is non-incluive and as such the byte at the returned offset
+    /// is not part of this bound.
+    pub fn end(&self) -> usize {
         self.global_start + self.len
     }
 
-    pub fn split_bounds(bounds: &mut Vec<IncludeBounds>, start: usize, end: usize, offset: usize) {
+    /// The total length in bytes of the bound.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// The start of the bound in the file this bound maps to, in bytes.
+    ///
+    /// Simply offseting from this position within the file does
+    /// not always give the intended position as the C preprocessor can, and
+    /// will, remove whitespace that is in the original file.
+    /// Use `file_line_from_global` to retrieve the real position within a file
+    /// for a given offset.
+    pub fn child_start(&self) -> usize {
+        self.child_start
+    }
+
+    /// Returns the method that was used to include the file that this bound
+    /// bound maps to.
+    pub fn include_method(&self) -> &IncludeMethod {
+        &self.method
+    }
+
+    fn split_bounds(bounds: &mut Vec<IncludeBounds>, start: usize, end: usize, offset: usize) {
         let mut remainders: Vec<IncludeBounds> = Vec::new();
 
         // println!("split s: {} e: {} off: {}", start, end, offset);
 
         for b in bounds.iter_mut() {
             // println!("g_start: {} g_end: {}", b.global_start, b.global_end());
-            if b.global_start < start && b.global_end() >= start {
+            if b.start() < start && b.end() >= start {
                 // global_start -- start -- global_end
-                let remainder = b.global_end() - start;
+                let remainder = b.end() - start;
 
                 // println!("remainder: {}", remainder);
 
                 remainders.push(IncludeBounds {
                     path: b.path.clone(),
                     global_start: end,
-                    child_start: b.child_start + start - b.global_start + offset,
+                    child_start: b.start() + start - b.start() + offset,
                     len: remainder, // - offset,
-                    method: b.method.clone(),
+                    method: b.include_method().clone(),
                 });
 
-                b.len = start - b.global_start;
-            } else if b.global_start == start {
+                b.len = start - b.start();
+            } else if b.start() == start {
                 // split is at begining of the bound
                 // offset the start
                 {
@@ -106,11 +165,20 @@ impl IncludeBounds {
         bounds.sort();
     }
 
+    /// Find the line and column of a file given an offset into the global
+    /// buffer.
+    ///
+    /// # Errors
+    /// Returns `NotInBounds` if the offset given is not within the
+    /// bounds specified by this IncludeBound.
+    /// Returns `ParseError` on failure to convert offset to line
+    /// and column.
+    /// Returns `IOError` on failure to open a file.
     pub fn file_line_from_global(&self,
                                  global_buffer: &[u8],
                                  offset: usize)
-                                 -> Result<(usize, usize), IncludeError> {
-        if offset >= self.global_start && offset < self.global_end() {
+                                 -> Result<(usize, usize), BoundsError> {
+        if offset >= self.global_start && offset < self.end() {
             match self.method {
                 IncludeMethod::DTS => {
                     let b = File::open(&self.path)?.bytes().filter_map(|e| e.ok());
@@ -142,7 +210,7 @@ impl IncludeBounds {
                 }
             }
         } else {
-            Err(IncludeError::NotInBounds)
+            Err(BoundsError::NotWithinBounds)
         }
     }
 }
@@ -225,7 +293,8 @@ fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset:
         // double check that last bound was from a linemarker
         match bounds.last_mut() {
             Some(ref mut bound) if bound.method == IncludeMethod::CPP => { bound.len = pre.len() }
-            Some(_) => return Err(IncludeError::LinemarkerInDtsi),
+            Some(&mut IncludeBounds{ ref path, .. }) =>
+                return Err(IncludeError::LinemarkerInDtsi(path.to_owned())),
             None => unreachable!(),
         }
 
@@ -265,6 +334,21 @@ named!(find_include<(&[u8], String)>, do_parse!(
     (pre, path)
 ));
 
+/// Parses include statements in the file returning a buffer with all files
+/// included and the bounds of each included file.
+///
+/// The `IncludeBounds` can be ignored if tracing from the final buffer to the
+/// original file is not needed.
+///
+/// # Errors
+/// Returns `IOError` if any file cannot be opened.
+/// Returns `ParseError` if any line is unable to be converted to
+/// an offset.
+/// Returns `NoBoundReturned` if something really went wrong
+/// while parsing a included file.
+/// Returns `LinemarkerInDtsi` if a C preprocessor linemarker is found within a
+/// file included by an `/include/` statement. This should never happen, and if
+/// it does that file needs to be cleaned up.
 pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
     fn _include_files(path: &Path,
                       main_offset: usize)
@@ -307,7 +391,7 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Inclu
         } else {
             // println!("main_offset {}", main_offset);
             IncludeBounds {
-                path: path.to_path_buf(),
+                path: path.to_owned(),
                 global_start: main_offset,
                 child_start: 0,
                 // TODO: check from parent directory of root file
@@ -333,10 +417,10 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Inclu
 
             let inc_start = sub_bounds.first()
                                       .map(|b| b.global_start)
-                                      .ok_or(IncludeError::NoBoundReturned(included_path.to_path_buf()))?;
+                                      .ok_or(IncludeError::NoBoundReturned(included_path.to_owned()))?;
             let inc_end = sub_bounds.last()
-                                    .map(|b| b.global_end())
-                                    .ok_or(IncludeError::NoBoundReturned(included_path.to_path_buf()))?;
+                                    .map(|b| b.end())
+                                    .ok_or(IncludeError::NoBoundReturned(included_path.to_owned()))?;
             let eaten_len = (buf.len() - offset) - rem.len();
 
             IncludeBounds::split_bounds(&mut bounds, inc_start, inc_end, eaten_len);

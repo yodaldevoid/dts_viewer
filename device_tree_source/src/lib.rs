@@ -1,3 +1,6 @@
+#![deny(missing_debug_implementations, trivial_casts, trivial_numeric_casts)]
+#![warn(missing_docs)]
+
 #[macro_use]
 extern crate nom;
 

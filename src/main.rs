@@ -15,7 +15,7 @@ use std::fmt::{self, Display, Formatter};
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
 
-use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, include_files};
+use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, BoundsError, include_files};
 
 use change_tracker::LabelStore;
 
@@ -88,10 +88,9 @@ fn main() {
         Err(e) => {
             match e {
                 IncludeError::IOError(err) => println!("IO error while trying to open file: {}", err),
-                IncludeError::LinemarkerInDtsi => println!("Extraneous linemarker found in DT include."),
+                IncludeError::LinemarkerInDtsi(path) => println!("Extraneous linemarker found in DT include: {}", path.to_string_lossy()),
                 IncludeError::ParseError(_) => println!("Failed to convert line to byte offset for bounds tracking."),
                 IncludeError::NoBoundReturned(path) => println!("No bounds returned after parsing file: {}", path.to_string_lossy()),
-                _ => unreachable!(),
             }
             return;
         }
@@ -198,7 +197,7 @@ fn main() {
                         // println!("Start offset: {}", offset);
                         match bounds.binary_search_by(|b| {
                             use std::cmp::Ordering::*;
-                            match (b.global_start.cmp(&offset), b.global_end().cmp(&offset)) {
+                            match (b.start().cmp(&offset), b.end().cmp(&offset)) {
                                 (Less, Greater) | (Equal, Greater) => Equal,
                                 (Greater, Greater) => Greater,
                                 (Equal, Less) | (Less, Less) | (Less, Equal) | (Equal, Equal)
@@ -208,25 +207,24 @@ fn main() {
                         }) {
                             Ok(off) => {
                                 let bound = &bounds[off];
-                                print!("File: {}", bound.path.to_string_lossy());
+                                print!("File: {}", bound.child_path().to_string_lossy());
 
                                 match bound.file_line_from_global(&buffer, offset) {
                                     Ok((line, col)) => {
                                         println!(", Line: {}, Column: {}", line, col)
                                     }
                                     Err(err) => match err {
-                                        IncludeError::ParseError(_) =>
+                                        BoundsError::ParseError(_) =>
                                             println!("Offset ({}) could not be converted to line.",
                                                      offset),
-                                        IncludeError::IOError(_) =>
+                                        BoundsError::IOError(_) =>
                                             println!("Failed to open file: {}",
-                                                     bound.path.to_string_lossy()),
-                                        IncludeError::NotInBounds =>
+                                                     bound.child_path().to_string_lossy()),
+                                        BoundsError::NotWithinBounds =>
                                             println!("File offset ({}) was supposed to be in\
                                                          bound. {:?}",
                                                      offset,
                                                      bound),
-                                        _ => unreachable!(),
                                     }
                                 }
                             }
@@ -252,13 +250,13 @@ impl IncludeTree {
     fn bounds_to_tree(bounds: &[IncludeBounds]) -> Option<IncludeTree> {
         if let Some(first) = bounds.first() {
             let mut tree = IncludeTree {
-                path: first.path.clone(),
+                path: first.child_path().to_owned(),
                 includes: Vec::new(),
-                method: first.method.clone(),
+                method: first.include_method().clone(),
             };
 
             //TODO: we don't really need the filter, benchmark speed w/wo
-            for sub_bounds in bounds.split(|b| b.path == first.path)
+            for sub_bounds in bounds.split(|b| b.child_path() == first.child_path())
                                     .filter(|s| !s.is_empty()) {
                 if let Some(sub_tree) = Self::bounds_to_tree(sub_bounds) {
                     tree.includes.push(sub_tree);
