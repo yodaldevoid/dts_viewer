@@ -24,7 +24,7 @@ pub struct ReserveInfo {
 
 impl Labeled for ReserveInfo {
     fn add_label(&mut self, label: &str) {
-        let label = label.to_string();
+        let label = label.to_owned();
         if !self.labels.contains(&label) {
             self.labels.push(label);
         }
@@ -57,7 +57,7 @@ impl Labeled for Node {
         match *self {
             Node::Deleted { .. } => panic!("Why are you adding a label to a deleted node?!"),
             Node::Existing { ref mut labels, .. } => {
-                let label = label.to_string();
+                let label = label.to_owned();
                 if labels.contains(&label) {
                     labels.push(label);
                 }
@@ -143,7 +143,7 @@ impl Labeled for Property {
                 panic!("Why are you adding a label to a deleted property?!")
             }
             Property::Existing { ref mut labels, .. } => {
-                let label = label.to_string();
+                let label = label.to_owned();
                 if labels.contains(&label) {
                     labels.push(label);
                 }

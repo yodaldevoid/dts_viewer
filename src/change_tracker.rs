@@ -77,7 +77,7 @@ impl<'a> LabelStore<'a> {
                         match val.last() {
                             Some(&Element::Node(&Node::Existing { .. })) |
                             Some(&Element::Prop(&Property::Existing { .. })) => {
-                                Some(key.to_path_buf())
+                                Some(key.to_owned())
                             }
                             _ => None,
                         }
@@ -95,7 +95,7 @@ impl<'a> LabelStore<'a> {
                 let node_path = match *name {
                     NodeName::Full(ref name) => path.join(name),
                     NodeName::Label(ref label) => {
-                        self.path_from_label(label).unwrap().to_path_buf()
+                        self.path_from_label(label).unwrap().to_owned()
                     }
                 };
 
@@ -151,7 +151,7 @@ impl<'a> LabelStore<'a> {
     fn insert_labels(&mut self, path: &Path, labels: &'a [String]) {
         for label in labels {
             if !self.labels.contains_key(label.as_str()) {
-                self.labels.insert(label, path.to_path_buf());
+                self.labels.insert(label, path.to_owned());
             } else if self.labels[label.as_str()] != path {
                 // TODO: error, duplicate labels
                 panic!("Duplicate label \"{}\" at different paths", label);

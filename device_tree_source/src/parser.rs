@@ -611,7 +611,7 @@ pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
                 ))
             }
         }
-        IResult::Incomplete(_) => Err("Incomplete input".to_string()),
+        IResult::Incomplete(_) => Err("Incomplete input".to_owned()),
         IResult::Error(err) => Err(format!("Error during parsing: {:?}", err)),
     }
 }
@@ -629,7 +629,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "empty_prop".to_string(),
+                    name: "empty_prop".to_owned(),
                     val: None,
                     labels: Vec::new(),
                     offset: 0,
@@ -646,7 +646,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "cell_prop".to_string(),
+                    name: "cell_prop".to_owned(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
                     offset: 0,
@@ -663,10 +663,10 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "string_prop".to_string(),
+                    name: "string_prop".to_owned(),
                     val: Some(vec![
-                            Data::String("string".to_string()),
-                            Data::String("string2".to_string())
+                            Data::String("string".to_owned()),
+                            Data::String("string2".to_owned())
                          ]),
                     labels: Vec::new(),
                     offset: 0,
@@ -683,7 +683,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "bytes_prop".to_string(),
+                    name: "bytes_prop".to_owned(),
                     val: Some(vec![Data::ByteArray(vec![0x12, 0x34, 0x56, 0x78])]),
                     labels: Vec::new(),
                     offset: 0,
@@ -700,9 +700,9 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "mixed_prop".to_string(),
+                    name: "mixed_prop".to_owned(),
                     val: Some(vec![
-                        Data::String("abc".to_string()),
+                        Data::String("abc".to_owned()),
                         Data::ByteArray(vec![0x12, 0x34]),
                         Data::Cells(32, vec![(0xa, None), (0xb, None), (0xc, None)])
                     ]),
@@ -721,7 +721,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "test_prop".to_string(),
+                    name: "test_prop".to_owned(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
                     offset: 0,
@@ -738,7 +738,7 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Property::Existing {
-                    name: "test_prop".to_string(),
+                    name: "test_prop".to_owned(),
                     val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
                     labels: Vec::new(),
                     offset: 0,
@@ -753,7 +753,7 @@ mod tests {
             parse_data(b"\"\\x7f\\0stuffstuff\\t\\t\\t\\n\\n\\n\""),
             IResult::Done(
                 &b""[..],
-                Data::String("\x7f\0stuffstuff\t\t\t\n\n\n".to_string())
+                Data::String("\x7f\0stuffstuff\t\t\t\n\n\n".to_owned())
             )
         );
     }
@@ -840,7 +840,7 @@ mod tests {
     fn data_cell_ref() {
         assert_eq!(
             parse_data(b"<&ref>"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![(0, Some("ref".to_string()))]))
+            IResult::Done(&b""[..], Data::Cells(32, vec![(0, Some("ref".to_owned()))]))
         );
     }
 

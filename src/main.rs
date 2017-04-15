@@ -180,7 +180,7 @@ fn main() {
             match store.path_from_label(line) {
                 Some(path) => {
                     println!("Path: {}", path.to_string_lossy());
-                    Some(path.to_path_buf())
+                    Some(path.to_owned())
                 }
                 None => {
                     println!("Label points to no path");
@@ -270,7 +270,7 @@ impl IncludeTree {
     }
 
     fn write(&self, f: &mut Formatter, prefix: &str) -> fmt::Result {
-        let mut next_prefix = prefix.to_string();
+        let mut next_prefix = prefix.to_owned();
         next_prefix.push_str(" |-");
 
         let method = match self.method {
