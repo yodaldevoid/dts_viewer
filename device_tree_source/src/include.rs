@@ -215,6 +215,27 @@ impl IncludeBounds {
     }
 }
 
+/// Performs a binary search on the collection of bounds and returns the one containing the offset.
+///
+/// # Errors
+/// Returns `NotWithinBounds` if the `IncludeBounds` containing the offset cannot be found.
+pub fn get_bounds_containing_offset<'a>(bounds: &'a [IncludeBounds],
+                                        offset: usize)
+                                        -> Result<&'a IncludeBounds, BoundsError> {
+    match bounds.binary_search_by(|b| {
+        use std::cmp::Ordering::*;
+        match (b.start().cmp(&offset), b.end().cmp(&offset)) {
+            (Less, Greater) | (Equal, Greater) => Equal,
+            (Greater, Greater) => Greater,
+            (Equal, Less) | (Less, Less) | (Less, Equal) | (Equal, Equal) => Less,
+            _ => unreachable!(),
+        }
+    }) {
+        Ok(off) => Ok(&bounds[off]),
+        Err(_) => Err(BoundsError::NotWithinBounds),
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct Linemarker {
     child_line: usize,

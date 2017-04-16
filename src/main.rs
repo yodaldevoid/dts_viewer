@@ -15,7 +15,8 @@ use std::fmt::{self, Display, Formatter};
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
 
-use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, BoundsError, include_files};
+use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, BoundsError,
+                                  include_files, get_bounds_containing_offset};
 
 use change_tracker::LabelStore;
 
@@ -195,18 +196,8 @@ fn main() {
                     for change in changes {
                         let offset = change.get_offset();
                         // println!("Start offset: {}", offset);
-                        match bounds.binary_search_by(|b| {
-                            use std::cmp::Ordering::*;
-                            match (b.start().cmp(&offset), b.end().cmp(&offset)) {
-                                (Less, Greater) | (Equal, Greater) => Equal,
-                                (Greater, Greater) => Greater,
-                                (Equal, Less) | (Less, Less) | (Less, Equal) | (Equal, Equal)
-                                    => Less,
-                                _ => unreachable!(),
-                            }
-                        }) {
-                            Ok(off) => {
-                                let bound = &bounds[off];
+                        match get_bounds_containing_offset(&bounds, offset) {
+                            Ok(bound) => {
                                 print!("File: {}", bound.child_path().to_string_lossy());
 
                                 match bound.file_line_from_global(&buffer, offset) {
