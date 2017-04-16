@@ -1,3 +1,7 @@
+//! This module includes functions and structures that deal with the parsing and
+//! execution of Device Tree `/include/` statements as well as the mapping from
+//! the global buffer returned by `include_files` back to the original file.
+
 use std::str::{self, FromStr};
 use std::path::{PathBuf, Path};
 use std::fs::File;
@@ -9,10 +13,16 @@ use nom::{IResult, ErrorKind, Needed, FindSubstring, digit, space, multispace, l
 use parser::escape_c_string;
 use ::{byte_offset_to_line_col, line_to_byte_offset};
 
+/// Defines errors from manipulating IncludeBounds.
 #[derive(Debug)]
 pub enum BoundsError {
+    /// The given offset was not within the collection of bounds or single
+    /// `IncludeBounds`.
     NotWithinBounds,
+    /// Some IO Error. Probably from trying to open a file.
     IOError(io::Error),
+    /// Some `ParseError`. Probably from a failed attempt to convert from lines
+    /// to byte offsets.
     ParseError(::ParseError)
 }
 
@@ -28,11 +38,19 @@ impl From<::ParseError> for BoundsError {
     }
 }
 
+/// Defines various errors that may happen in the include process.
 #[derive(Debug)]
 pub enum IncludeError {
-    NoBoundReturned(PathBuf), // No bounds returned from sub include_files
-    LinemarkerInDtsi(PathBuf), // Linemarker found within DTS include
+    /// No bounds returned after parsing file
+    NoBoundReturned(PathBuf),
+    /// Extraneous CPP linemarker found in file included by DT `/include/`
+    /// statement. This **should** never happen, but if it does the file where
+    /// the linemarker was found needs to be cleaned up.
+    LinemarkerInDtsi(PathBuf),
+    /// Some IO Error. Probably from trying to open a file.
     IOError(io::Error),
+    /// Some `ParseError`. Probably from a failed attempt to convert from lines
+    /// to byte offsets.
     ParseError(::ParseError)
 }
 
@@ -48,6 +66,13 @@ impl From<::ParseError> for IncludeError {
     }
 }
 
+/// Stores the information to map a section of the buffer returned by
+/// `include_files` to the original file. Often does not map a whole file, but
+/// only a part starting at at `child_start`. The mapped section starts at
+/// `start()` bytes in the global buffer and continues for `len()` bytes.
+/// `len()` does not indicate the length in bytes that the `IncludeBounds` maps
+/// to in the original file as if the file has been processed by the C
+/// preprocessor whitespace may have been removed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncludeBounds {
     path: PathBuf,
@@ -91,7 +116,7 @@ impl IncludeBounds {
 
     /// Returns the start of the bound in the global buffer, in bytes.
     ///
-    /// This is incluive and as such the byte at the returned offset is
+    /// This is inclusive and as such the byte at the returned offset is
     /// part of this bound.
     pub fn start(&self) -> usize {
         self.global_start
@@ -99,7 +124,7 @@ impl IncludeBounds {
 
     /// Returns the end of the bound in the global buffer, in bytes.
     ///
-    /// This is non-incluive and as such the byte at the returned offset
+    /// This is non-inclusive and as such the byte at the returned offset
     /// is not part of this bound.
     pub fn end(&self) -> usize {
         self.global_start + self.len
@@ -112,7 +137,7 @@ impl IncludeBounds {
 
     /// The start of the bound in the file this bound maps to, in bytes.
     ///
-    /// Simply offseting from this position within the file does
+    /// Simply offsetting from this position within the file does
     /// not always give the intended position as the C preprocessor can, and
     /// will, remove whitespace that is in the original file.
     /// Use `file_line_from_global` to retrieve the real position within a file
@@ -355,8 +380,10 @@ named!(find_include<(&[u8], String)>, do_parse!(
     (pre, path)
 ));
 
-/// Parses include statements in the file returning a buffer with all files
-/// included and the bounds of each included file.
+/// Parses `/include/` statements in the file returning a buffer with all files
+/// included and the bounds of each included file. If C style `#include`
+/// statements need to be parsed that step should be performed before calling
+/// this function on the file output from that step.
 ///
 /// The `IncludeBounds` can be ignored if tracing from the final buffer to the
 /// original file is not needed.
