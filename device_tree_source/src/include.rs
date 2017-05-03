@@ -397,7 +397,7 @@ named!(find_include<(&[u8], String)>, do_parse!(
 /// Returns `LinemarkerInDtsi` if a C preprocessor linemarker is found within a
 /// file included by an `/include/` statement. This should never happen, and if
 /// it does that file needs to be cleaned up.
-pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
+pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
     fn _include_files(path: &Path,
                       main_offset: usize)
                       -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
@@ -488,7 +488,7 @@ pub fn include_files(path: &Path) -> Result<(Vec<u8>, Vec<IncludeBounds>), Inclu
         Ok((buffer, bounds))
     }
 
-    _include_files(path, 0)
+    _include_files(path.as_ref(), 0)
 }
 
 #[cfg(test)]
