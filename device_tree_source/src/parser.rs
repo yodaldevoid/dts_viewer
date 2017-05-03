@@ -7,6 +7,7 @@ use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alph
           not_line_ending, multispace, space, rest};
 
 use tree::{BootInfo, ReserveInfo, Node, NodeName, Property, Data};
+use ::ParseError;
 
 // Copied and modified from rust-lang/rust/src/libcore/num/mod.rs
 trait FromStrRadix: PartialOrd + Copy {
@@ -352,7 +353,7 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
     }
 }
 
-named!(pub integer<u64>, alt_complete!(
+named!(integer<u64>, alt_complete!(
     // TODO:
     /*
     comments_ws!(do_parse!( // trinary
@@ -403,7 +404,12 @@ named!(parse_ref<String>, alt!(
     )
 ));
 
-// Warning! Only supports hex escape codes up to 0x7f because UTF-8 reasons
+/// Parse a slice of bytes as a `String`, replacing escape codes with the
+/// appropriate character. Characters may be described as a C-style escape code.
+/// All hexadecimal and octal escape codes work up to 0x7f or x177,
+/// respectively. This is due to the conversion to `char`s. See
+/// `parser::escape_c_char` if a conversion of a character beyond this change is
+/// needed.
 named!(pub escape_c_string<String>, map_res!(
     escaped_transform!(take_until_either!("\\\""), '\\',
         alt!(
@@ -425,8 +431,10 @@ named!(pub escape_c_string<String>, map_res!(
     String::from_utf8)
 );
 
-// Can support hex escape codes up to 0xff because we are not converting to char
-named!(escape_c_char<u8>, alt!(
+/// Parse a slice of bytes as a ASCII character. The character may be described
+/// as a C-style escape code. All hexadecimal and octal escape codes work up to
+/// 0xff or x777, respectively, because they are not converted to `char`s.
+named!(pub escape_c_char<u8>, alt!(
     tag!("\\a")     => { |_| 0x07 } |
     tag!("\\b")     => { |_| 0x08 } |
     tag!("\\t")     => { |_| b'\t' } |
@@ -595,24 +603,57 @@ named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_
     mem_reserves: many0!(parse_mem_reserve) >>
     device_tree: apply!(parse_device_tree, input_len) >>
     ammendments: many0!(apply!(parse_ammend, input_len)) >>
+    // TODO: set boot cpu id
     (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
 )));
 
-// TODO: error messages
-pub fn parse_dt(source: &[u8]) -> Result<(BootInfo, Vec<Node>), String> {
+/// Returned on a successful completion of `parse_dt`.
+#[derive(Debug)]
+pub enum ParseResult<'a> {
+    /// Indicates that the entirety of the buffer was used while parsing. Holds
+    /// the boot info that includes the first root node and a `Vec` of all
+    /// following nodes.
+    Complete(BootInfo, Vec<Node>),
+    /// Indicates that only of the buffer was used while parsing. Holds the boot
+    /// info that includes the first root node, a `Vec` of all following nodes,
+    /// and a slice containing the remainder of the buffer. Having left over
+    /// output after parsing is generally not expected and in most cases should
+    /// be considered an error.
+    RemainingInput(BootInfo, Vec<Node>, &'a [u8])
+}
+
+/// Parses the slice of `u8`s as ASCII characters and returns a device tree made
+/// of the first root node and a `Vec` of nodes defined after that. The nodes
+/// defined after the first root node may specify a node by label to modify or
+/// my start at the root node. These amendments to the root node can be merged
+/// into the device tree manually or by `tree::apply_amends`.
+///
+/// When a tree and any following nodes are parsed successfully without
+/// remaining input `ParseResult::Complete` is returned containing the tree and
+/// the following nodes. If there is remaining input
+/// `ParseResult::RemainingInput` is returned with the tree, following nodes,
+/// and a slice of the remaining input.
+///
+/// # Errors
+/// Returns `ParseError::IncompleteInput` if the end of the input was reached
+/// where more was expected.
+/// Returns `ParseError::NomError` if a `nom` parsing error was returned. This
+/// doesn't help much right now, but will be improved soon.
+pub fn parse_dt(source: &[u8]) -> Result<ParseResult, ParseError> {
     match parse_dts(source, source.len()) {
-        IResult::Done(remaining, device_tree) => {
+        IResult::Done(remaining, (tree, amends)) => {
             if remaining.is_empty() {
-                Ok(device_tree)
+                Ok(ParseResult::Complete(tree, amends))
             } else {
-                Err(format!(
-                    "Remaining input after completion: {}",
-                    String::from_utf8_lossy(remaining)
-                ))
+                Ok(ParseResult::RemainingInput(tree, amends, remaining))
             }
         }
-        IResult::Incomplete(_) => Err("Incomplete input".to_owned()),
-        IResult::Error(err) => Err(format!("Error during parsing: {:?}", err)),
+        IResult::Incomplete(_) => Err(ParseError::IncompleteInput),
+        IResult::Error(err) => {
+            // TODO: specific error messages
+            println!("{:#?}", err);
+            Err(ParseError::NomError)
+        }
     }
 }
 

@@ -14,7 +14,7 @@ use std::fmt::{self, Display, Formatter};
 
 use mktemp::Temp;
 
-use device_tree_source::parser::parse_dt;
+use device_tree_source::parser::{ParseResult, parse_dt};
 use device_tree_source::tree::Offset;
 
 use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, BoundsError,
@@ -76,7 +76,7 @@ fn main() {
         }
     }
 
-    let include_output = cpp_command.output().expect("Failed to execute CPP");
+    let include_output = cpp_command.output().expect("Failed to start CPP");
     let cpp_stderr = String::from_utf8_lossy(&include_output.stderr);
     if !include_output.status.success() {
         println!("Failed to execute CPP. Error message is below.");
@@ -88,10 +88,15 @@ fn main() {
         Ok(x) => x,
         Err(e) => {
             match e {
-                IncludeError::IOError(err) => println!("IO error while trying to open file: {}", err),
-                IncludeError::LinemarkerInDtsi(path) => println!("Extraneous linemarker found in DT include: {}", path.to_string_lossy()),
-                IncludeError::ParseError(_) => println!("Failed to convert line to byte offset for bounds tracking."),
-                IncludeError::NoBoundReturned(path) => println!("No bounds returned after parsing file: {}", path.to_string_lossy()),
+                IncludeError::IOError(err) =>
+                    println!("IO error while trying to open file: {}", err),
+                IncludeError::LinemarkerInDtsi(path) =>
+                    println!("Extraneous linemarker found in DT include: {}",
+                             path.to_string_lossy()),
+                IncludeError::ParseError(_) =>
+                    println!("Failed to convert line to byte offset for bounds tracking."),
+                IncludeError::NoBoundReturned(path) =>
+                    println!("No bounds returned after parsing file: {}", path.to_string_lossy()),
             }
             return;
         }
@@ -110,8 +115,12 @@ fn main() {
         println!("-- Could not constuct include tree from bounds!");
     }
 
-    let (boot_info, ammends) = match parse_dt(&buffer) {
-        Ok(dt) => dt,
+    let (boot_info, amends) = match parse_dt(&buffer) {
+        Ok(ParseResult::Complete(boot_info, amends)) => (boot_info, amends),
+        Ok(ParseResult::RemainingInput(boot_info, amends, rem)) => {
+            println!("Input remaining after parsing:\n\"{}\"", String::from_utf8_lossy(rem));
+            (boot_info, amends)
+        }
         Err(err) => {
             println!("{:?}", err);
             return;
@@ -147,7 +156,7 @@ fn main() {
     // fixup path refs
 
     let mut store = LabelStore::new();
-    store.fill(&boot_info, &ammends);
+    store.fill(&boot_info, &amends);
 
     loop {
         print!("Enter alias or path: ");

@@ -14,6 +14,8 @@ use std::iter::once;
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     NotFound,
+    IncompleteInput,
+    NomError,
 }
 
 /// Returns the byte offset of the starting character of line within the iterator.
