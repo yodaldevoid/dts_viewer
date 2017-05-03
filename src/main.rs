@@ -1,16 +1,18 @@
 extern crate device_tree_source;
 #[macro_use]
 extern crate clap;
+extern crate mktemp;
 
 mod change_tracker;
 
 use std::process::Command;
 use std::path::{Path, PathBuf};
-use std::fs::remove_file;
 use std::io::{self, BufRead, Write};
 use std::iter::Iterator;
 use std::fmt::{self, Display, Formatter};
 // use std::fs::File;
+
+use mktemp::Temp;
 
 use device_tree_source::parser::parse_dt;
 use device_tree_source::tree::Offset;
@@ -19,8 +21,6 @@ use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, Bo
                                   include_files, get_bounds_containing_offset};
 
 use change_tracker::LabelStore;
-
-const CPP_OUTPUT_NAME: &'static str = "dts_viewer_tmp.dts";
 
 // General idea:
 //  Run CPP
@@ -49,14 +49,14 @@ fn main() {
         .get_matches();
 
     let file_name = matches.value_of("file").unwrap();
+    let parent = Path::new(file_name).parent().expect("Could not get parent directory of file");
 
-    let file = Path::new(file_name);
-    let parent = file.parent().expect("Could not get parent directory of file");
+    let cpp_temp_out = Temp::new_file().expect("Could not create temp file");
 
     let mut cpp_command = Command::new("gcc");
     cpp_command.args(&["-E", "-nostdinc"])
         .args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
-        .args(&["-o", CPP_OUTPUT_NAME])
+        .args(&["-o", cpp_temp_out.as_ref().to_str().unwrap()])
         .arg(&file_name);
 
     if !matches.is_present("no_defaults") {
@@ -84,7 +84,7 @@ fn main() {
         return;
     }
 
-    let (buffer, bounds) = match include_files(Path::new(CPP_OUTPUT_NAME)) {
+    let (buffer, bounds) = match include_files(&cpp_temp_out) {
         Ok(x) => x,
         Err(e) => {
             match e {
@@ -96,10 +96,6 @@ fn main() {
             return;
         }
     };
-
-    if let Err(e) = remove_file(Path::new(CPP_OUTPUT_NAME)) {
-        println!("-- Failed to delete temp file: {:?}", e);
-    }
 
     // println!("{:#?}", bounds);
     // {

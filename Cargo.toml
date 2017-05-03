@@ -13,3 +13,4 @@ repository = "https://github.com/yodaldevoid/dts_viewer"
 [dependencies]
 device_tree_source = { path = "device_tree_source", version = "^0.1" }
 clap = "^2"
+mktemp = "^0.3"
