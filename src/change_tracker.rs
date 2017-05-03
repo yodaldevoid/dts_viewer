@@ -49,7 +49,7 @@ impl<'a> LabelStore<'a> {
         for node in ammends {
             match *node {
                 Node::Existing { ref name, .. } => {
-                    if name.to_str() == "/" || self.labels.contains_key(name.to_str()) {
+                    if name.as_str() == "/" || self.labels.contains_key(name.as_str()) {
                         self.fill_internal(Path::new(""), node);
                     } else {
                         unimplemented!();

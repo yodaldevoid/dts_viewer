@@ -117,7 +117,7 @@ impl fmt::Display for NodeName {
 }
 
 impl NodeName {
-    pub fn to_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match *self {
             NodeName::Label(ref name) |
             NodeName::Full(ref name) => name,
