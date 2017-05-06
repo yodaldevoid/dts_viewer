@@ -127,33 +127,7 @@ fn main() {
         }
     };
 
-    // TODO: perform secondary checks and jazz (only smooth)
-    //
-    // checkes to do:
-    // duplicate node names
-    // duplicate property names
-    // node name format (only one @)
-    // unit addr vs reg/ranges property
-    // duplicate labels -- handled by creation of alias store
-    // duplicate explict phandles
-    // name property does not match name
-    // check if X is cell only
-    // #address-cells
-    // #size-cells
-    // #interrupt-cells
-    // check if X is string only
-    // device_type
-    // model
-    // status
-    // fixup addr size cells
-    // check reg property format
-    // check ranges property format
-    // avoid default addr size?
-    // obsolete chosen iterrupt controller
-    //
-    // maybe:
-    // fixup phandle refs
-    // fixup path refs
+    // TODO: perform secondary checks and jazz (only smooth) - issue 9
 
     let mut store = LabelStore::new();
     store.fill(&boot_info, &amends);

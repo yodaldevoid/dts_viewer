@@ -153,7 +153,7 @@ impl<'a> LabelStore<'a> {
             if !self.labels.contains_key(label.as_str()) {
                 self.labels.insert(label, path.to_owned());
             } else if self.labels[label.as_str()] != path {
-                // TODO: error, duplicate labels
+                // TODO: maybe just print error message and allow user to determine if they should exit
                 panic!("Duplicate label \"{}\" at different paths", label);
             }
         }

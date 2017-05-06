@@ -14,6 +14,7 @@ use parser::escape_c_string;
 use ::{byte_offset_to_line_col, line_to_byte_offset};
 
 /// Defines errors from manipulating IncludeBounds.
+// TODO: impl Display and Error - issue 1.2
 #[derive(Debug)]
 pub enum BoundsError {
     /// The given offset was not within the collection of bounds or single
@@ -39,6 +40,7 @@ impl From<::ParseError> for BoundsError {
 }
 
 /// Defines various errors that may happen in the include process.
+// TODO: impl Display and Error - issue 1.3
 #[derive(Debug)]
 pub enum IncludeError {
     /// No bounds returned after parsing file
@@ -401,7 +403,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
     fn _include_files(path: &Path,
                       main_offset: usize)
                       -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
-        // TODO: check from parent directory of root file
+        // TODO: check from parent directory of root file - issue 2
         let mut file = File::open(path)?;
         let mut buffer: Vec<u8> = Vec::new();
         let mut bounds: Vec<IncludeBounds> = Vec::new();
@@ -423,7 +425,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
             let bound = IncludeBounds {
                 path: marker.path.clone(),
                 global_start: buf.len() - rem.len(),
-                // TODO: check from parent directory of root file
+                // TODO: check from parent directory of root file - issue 2
                 child_start: {
                     let b = File::open(&marker.path)?.bytes().filter_map(|e| e.ok());
                     line_to_byte_offset(b, marker.child_line)?
@@ -442,7 +444,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
                 path: path.to_owned(),
                 global_start: main_offset,
                 child_start: 0,
-                // TODO: check from parent directory of root file
+                // TODO: check from parent directory of root file - issue 2
                 len: File::open(path)?.bytes().count(),
                 method: IncludeMethod::DTS,
             }

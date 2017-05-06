@@ -354,7 +354,7 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
 }
 
 named!(integer<u64>, alt_complete!(
-    // TODO:
+    // TODO: - issue 5
     /*
     comments_ws!(do_parse!( // trinary
         a: flat_map!(take_until_and_consume!("?"), integer) >>
@@ -492,8 +492,8 @@ named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
     (ReserveInfo { address: addr, size: size, labels: labels })
 )));
 
-// TODO: labels in data
-// TODO: include binary
+// TODO: labels in data - issue 6
+// TODO: include binary - issue 7
 named!(parse_data<Data>, comments_ws!(alt!(
     delimited!(
         char!('"'),
@@ -603,7 +603,7 @@ named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_
     mem_reserves: many0!(parse_mem_reserve) >>
     device_tree: apply!(parse_device_tree, input_len) >>
     ammendments: many0!(apply!(parse_ammend, input_len)) >>
-    // TODO: set boot cpu id
+    // TODO: set boot cpu id - issue 8
     (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
 )));
 
@@ -650,8 +650,8 @@ pub fn parse_dt(source: &[u8]) -> Result<ParseResult, ParseError> {
         }
         IResult::Incomplete(_) => Err(ParseError::IncompleteInput),
         IResult::Error(err) => {
-            // TODO: specific error messages
-            println!("{:#?}", err);
+            // TODO: specific error messages - issue 4
+            // println!("{:?}", err);
             Err(ParseError::NomError)
         }
     }

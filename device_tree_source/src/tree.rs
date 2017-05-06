@@ -76,7 +76,7 @@ impl Offset for Node {
 }
 
 impl fmt::Display for Node {
-    // TODO: labels
+    // TODO: labels - issue 3
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Node::Deleted { ref name, .. } => write!(f, "// Node {} deleted", name)?,
@@ -162,7 +162,7 @@ impl Offset for Property {
 }
 
 impl fmt::Display for Property {
-    // TODO: labels
+    // TODO: labels - issue 3
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Property::Deleted { ref name, .. } => write!(f, "// Property {} deleted", name)?,
@@ -194,7 +194,7 @@ pub enum Data {
 }
 
 impl fmt::Display for Data {
-    // TODO: labels
+    // TODO: labels - issue 3 - issue 6
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Data::Reference(ref r) => write!(f, "&{}", r)?,

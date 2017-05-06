@@ -11,6 +11,7 @@ pub mod include;
 use std::borrow::Borrow;
 use std::iter::once;
 
+// TODO: impl Display and Error - issue 1.1
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     NotFound,
