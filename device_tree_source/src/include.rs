@@ -20,8 +20,9 @@ pub enum BoundsError {
     /// The given offset was not within the collection of bounds or single
     /// `IncludeBounds`.
     NotWithinBounds,
-    /// Some IO Error. Probably from trying to open a file.
-    IOError(io::Error),
+    /// Some IO Error. Probably from trying to open a file. May include the path
+    /// trying to be opened.
+    IOError(io::Error, Option<PathBuf>),
     /// Some `ParseError`. Probably from a failed attempt to convert from lines
     /// to byte offsets.
     ParseError(::ParseError)
@@ -29,7 +30,7 @@ pub enum BoundsError {
 
 impl From<io::Error> for BoundsError {
     fn from(err: io::Error) -> Self {
-        BoundsError::IOError(err)
+        BoundsError::IOError(err, None)
     }
 }
 
@@ -49,8 +50,9 @@ pub enum IncludeError {
     /// statement. This **should** never happen, but if it does the file where
     /// the linemarker was found needs to be cleaned up.
     LinemarkerInDtsi(PathBuf),
-    /// Some IO Error. Probably from trying to open a file.
-    IOError(io::Error),
+    /// Some IO Error. Probably from trying to open a file. May include the path
+    /// trying to be opened.
+    IOError(io::Error, Option<PathBuf>),
     /// Some `ParseError`. Probably from a failed attempt to convert from lines
     /// to byte offsets.
     ParseError(::ParseError)
@@ -58,7 +60,7 @@ pub enum IncludeError {
 
 impl From<io::Error> for IncludeError {
     fn from(err: io::Error) -> Self {
-        IncludeError::IOError(err)
+        IncludeError::IOError(err, None)
     }
 }
 
@@ -208,7 +210,11 @@ impl IncludeBounds {
         if offset >= self.global_start && offset < self.end() {
             match self.method {
                 IncludeMethod::DTS => {
-                    let b = File::open(&self.path)?.bytes().filter_map(|e| e.ok());
+                    let b = match File::open(&self.path) {
+                            Ok(f) => f,
+                            Err(e) => return Err(BoundsError::IOError(e, Some(self.path.to_owned()))),
+                        }
+                        .bytes().filter_map(|e| e.ok());
                     byte_offset_to_line_col(b, offset - self.global_start + self.child_start)
                                             .map_err(|e| e.into())
                 }
@@ -216,7 +222,11 @@ impl IncludeBounds {
                     let (g_line, g_col) = byte_offset_to_line_col(global_buffer.iter(), offset)?;
                     let (s_line, s_col) = byte_offset_to_line_col(global_buffer.iter(),
                                                                   self.global_start)?;
-                    let b = File::open(&self.path)?.bytes().filter_map(|e| e.ok());
+                    let b = match File::open(&self.path) {
+                            Ok(f) => f,
+                            Err(e) => return Err(BoundsError::IOError(e, Some(self.path.to_owned()))),
+                        }
+                        .bytes().filter_map(|e| e.ok());
                     let (c_line, c_col) = byte_offset_to_line_col(b, self.child_start)?;
 
                     // println!();
@@ -404,7 +414,10 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
                       main_offset: usize)
                       -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
         // TODO: check from parent directory of root file - issue 2
-        let mut file = File::open(path)?;
+        let mut file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
+        };
         let mut buffer: Vec<u8> = Vec::new();
         let mut bounds: Vec<IncludeBounds> = Vec::new();
 
@@ -427,10 +440,18 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
                 global_start: buf.len() - rem.len(),
                 // TODO: check from parent directory of root file - issue 2
                 child_start: {
-                    let b = File::open(&marker.path)?.bytes().filter_map(|e| e.ok());
+                    let b = match File::open(&marker.path) {
+                            Ok(f) => f,
+                            Err(e) => return Err(IncludeError::IOError(e, Some(marker.path.to_owned()))),
+                        }
+                        .bytes().filter_map(|e| e.ok());
                     line_to_byte_offset(b, marker.child_line)?
                 },
-                len: File::open(&marker.path)?.bytes().count(),
+                len: match File::open(&marker.path) {
+                        Ok(f) => f,
+                        Err(e) => return Err(IncludeError::IOError(e, Some(marker.path.to_owned()))),
+                    }
+                    .bytes().count(),
                 method: IncludeMethod::CPP,
             };
 
@@ -445,7 +466,11 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
                 global_start: main_offset,
                 child_start: 0,
                 // TODO: check from parent directory of root file - issue 2
-                len: File::open(path)?.bytes().count(),
+                len: match File::open(path) {
+                        Ok(f) => f,
+                        Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
+                    }
+                    .bytes().count(),
                 method: IncludeMethod::DTS,
             }
         };

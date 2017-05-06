@@ -88,8 +88,12 @@ fn main() {
         Ok(x) => x,
         Err(e) => {
             match e {
-                IncludeError::IOError(err) =>
-                    println!("IO error while trying to open file: {}", err),
+                IncludeError::IOError(err, path) => {
+                    print!("IO error: {}", err);
+                    if let Some(path) = path {
+                        println!(" {}", path.display());
+                    }
+                }
                 IncludeError::LinemarkerInDtsi(path) =>
                     println!("Extraneous linemarker found in DT include: {}",
                              path.to_string_lossy()),
@@ -187,7 +191,7 @@ fn main() {
                                         BoundsError::ParseError(_) =>
                                             println!("Offset ({}) could not be converted to line.",
                                                      offset),
-                                        BoundsError::IOError(_) =>
+                                        BoundsError::IOError(..) =>
                                             println!("Failed to open file: {}",
                                                      bound.child_path().to_string_lossy()),
                                         BoundsError::NotWithinBounds =>
