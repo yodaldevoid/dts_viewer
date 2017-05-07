@@ -162,8 +162,8 @@ impl IncludeBounds {
         // println!("split s: {} e: {} off: {}", start, end, offset);
 
         for b in bounds.iter_mut() {
-            // println!("g_start: {} g_end: {}", b.global_start, b.global_end());
-            if b.start() < start && b.end() >= start {
+            // println!("b.start: {} b.end: {} b.len: {}", b.start(), b.end(), b.len());
+            if b.start() <= start && b.end() >= start {
                 // global_start -- start -- global_end
                 let remainder = b.end() - start;
 
@@ -178,15 +178,6 @@ impl IncludeBounds {
                 });
 
                 b.len = start - b.start();
-            } else if b.start() == start {
-                // split is at begining of the bound
-                // offset the start
-                {
-                    let offset = end - start;
-                    b.global_start += offset;
-                }
-                // shrink the len by the offset
-                b.len -= offset;
             }
         }
 
@@ -337,17 +328,22 @@ named!(find_linemarker<(&[u8], Linemarker)>, do_parse!(
     (pre, marker)
 ));
 
-fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset: usize)
+fn parse_linemarkers(buf: &[u8],
+                     bounds: &mut Vec<IncludeBounds>,
+                     global_offset: usize,
+                     post_len: usize)
                      -> Result<(), IncludeError> {
     let end_offset = global_offset + buf.len();
-    // println!("{}", str::from_utf8(buf).unwrap());
+    // println!("{}", String::from_utf8_lossy(buf));
     let mut buf = buf;
     // println!("parsing linemarkers");
     while let IResult::Done(rem, (pre, marker)) = find_linemarker(buf) {
-        // println!("{}", str::from_utf8(line).unwrap());
         // println!("{:?}", marker);
         // println!("pre.len() {}", pre.len());
+        // println!("rem.len() {}", rem.len());
+        // println!("post_len {}", post_len);
 
+        // println!("{:#?}", bounds);
         // double check that last bound was from a linemarker
         match bounds.last_mut() {
             Some(ref mut bound) if bound.method == IncludeMethod::CPP => { bound.len = pre.len() }
@@ -364,7 +360,7 @@ fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset:
                 Ok(f) => line_to_byte_offset(f.bytes().filter_map(|e| e.ok()), marker.child_line)?,
                 Err(_) => 0,
             },
-            len: rem.len(),
+            len: rem.len() + post_len,
             method: IncludeMethod::CPP,
         };
 
@@ -435,6 +431,9 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
         let mut string_buffer = String::new();
         file.read_to_string(&mut string_buffer)?;
 
+        // println!("{}", string_buffer);
+        // println!();
+
         let mut buf = string_buffer.as_bytes();
 
         named!(first_linemarker<(&[u8], Linemarker)>,
@@ -488,7 +487,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
         bounds.push(start_bound);
 
         while let Some((pre, included_path, rem)) = find_include(&buf[..]) {
-            parse_linemarkers(pre, &mut bounds, buffer.len())?;
+            parse_linemarkers(pre, &mut bounds, buffer.len(), buf.len() - pre.len())?;
             buffer.extend_from_slice(pre);
 
             let offset = pre.len();
@@ -522,7 +521,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
         }
 
         // no more includes, just add the rest and return
-        parse_linemarkers(buf, &mut bounds, buffer.len())?;
+        parse_linemarkers(buf, &mut bounds, buffer.len(), 0)?;
         buffer.extend(buf);
 
         Ok((buffer, bounds))
