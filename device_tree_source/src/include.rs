@@ -376,7 +376,7 @@ fn parse_linemarkers(buf: &[u8], bounds: &mut Vec<IncludeBounds>, global_offset:
     Ok(())
 }
 
-named!(parse_include<String>, preceded!(
+named!(parse_include<String>, complete!(preceded!(
     tag!("/include/"),
     preceded!( multispace,
         delimited!(
@@ -384,13 +384,27 @@ named!(parse_include<String>, preceded!(
             escape_c_string,
             char!('"')
         ))
-));
+)));
 
-named!(find_include<(&[u8], String)>, do_parse!(
-    pre: take_until!("/include/") >>
-    path: parse_include >>
-    (pre, path)
-));
+fn find_include<'a>(buf: &'a [u8]) -> Option<(&'a [u8], PathBuf, &'a [u8])> {
+    // look for /include/
+    // check if it parses
+    // if it do, cool
+    // if it don't, move on
+    for (index, win) in buf.windows("/include/".len()).enumerate() {
+        if win == b"/include/" {
+            match parse_include(&buf[index..]) {
+                IResult::Done(rem, file) => {
+                    return Some((&buf[..index], PathBuf::from(file), rem))
+                }
+                IResult::Error(_) => {}
+                IResult::Incomplete(_) => unreachable!(),
+            }
+        }
+    }
+
+    return None
+}
 
 /// Parses `/include/` statements in the file returning a buffer with all files
 /// included and the bounds of each included file. If C style `#include`
@@ -476,34 +490,34 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
         };
         bounds.push(start_bound);
 
-        while let IResult::Done(rem, (pre, file)) = find_include(&buf[..]) {
+        while let Some((pre, included_path, rem)) = find_include(&buf[..]) {
             parse_linemarkers(pre, &mut bounds, buffer.len())?;
             buffer.extend_from_slice(pre);
 
             let offset = pre.len();
-            // println!("{}", file);
+            // println!("{}", file.display());
             // println!("Offset: {}", offset);
-            // println!("{}", include_tree);
+            // println!("{}", bounds);
 
-            let included_path = Path::new(&file);
             let total_len = buffer.len() + main_offset; // - 1;
-            let (sub_buf, sub_bounds) = _include_files(included_path, total_len)?;
+            let (sub_buf, sub_bounds) = _include_files(&included_path, total_len)?;
             buffer.extend(sub_buf);
 
             let inc_start = sub_bounds.first()
                                       .map(|b| b.global_start)
-                                      .ok_or(IncludeError::NoBoundReturned(included_path.to_owned()))?;
+                                      .ok_or(IncludeError::NoBoundReturned(included_path.clone()))?;
             let inc_end = sub_bounds.last()
                                     .map(|b| b.end())
-                                    .ok_or(IncludeError::NoBoundReturned(included_path.to_owned()))?;
+                                    .ok_or(IncludeError::NoBoundReturned(included_path.clone()))?;
             let eaten_len = (buf.len() - offset) - rem.len();
 
+            // println!("{:#?}", bounds);
             IncludeBounds::split_bounds(&mut bounds, inc_start, inc_end, eaten_len);
             bounds.extend_from_slice(&sub_bounds);
             bounds.sort();
 
             // println!("After split");
-            // println!("{}", include_tree);
+            // println!("{:#?}", bounds);
 
             buf = rem;
         }
