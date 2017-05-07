@@ -9,3 +9,7 @@ repository = "https://github.com/yodaldevoid/dts_viewer"
 
 [dependencies]
 nom = { version = "^2.1", features = ["verbose-errors"] }
+
+[dev-dependencies]
+mktemp = "^0.3"
+rayon = "^0.7"
