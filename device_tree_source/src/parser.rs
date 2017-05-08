@@ -574,7 +574,7 @@ named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
     )
 )));
 
-named_args!(parse_ammend(input_len: usize)<Node>, comments_ws!(alt!(
+named_args!(parse_amend(input_len: usize)<Node>, comments_ws!(alt!(
     do_parse!(
         offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
         tag!("/delete-node/") >>
@@ -609,9 +609,9 @@ named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_
     tag!("/dts-v1/;") >>
     mem_reserves: many0!(parse_mem_reserve) >>
     device_tree: apply!(parse_device_tree, input_len) >>
-    ammendments: many0!(apply!(parse_ammend, input_len)) >>
+    amendments: many0!(apply!(parse_amend, input_len)) >>
     // TODO: set boot cpu id - issue 8
-    (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, ammendments)
+    (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, amendments)
 )));
 
 /// Returned on a successful completion of `parse_dt`.

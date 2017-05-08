@@ -44,9 +44,9 @@ impl<'a> LabelStore<'a> {
 
     // TODO: somehow keep track of deleted labels so they can be searched for later
     //       while not being used for path lookup during change parsing
-    pub fn fill(&mut self, boot_info: &'a BootInfo, ammends: &'a [Node]) {
+    pub fn fill(&mut self, boot_info: &'a BootInfo, amends: &'a [Node]) {
         self.fill_internal(Path::new("/"), &boot_info.root);
-        for node in ammends {
+        for node in amends {
             match *node {
                 Node::Existing { ref name, .. } => {
                     if name.as_str() == "/" || self.labels.contains_key(name.as_str()) {
