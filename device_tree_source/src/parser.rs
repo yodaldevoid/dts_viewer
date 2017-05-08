@@ -562,8 +562,8 @@ named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
             tag!("/")
         ), str::from_utf8), String::from) >>
         char!('{') >>
-        props: many0!(apply!(parse_prop, input_len)) >>
-        subnodes: many0!(apply!(parse_node, input_len)) >>
+        props: many0!(call!(parse_prop, input_len)) >>
+        subnodes: many0!(call!(parse_node, input_len)) >>
         char!('}') >>
         char!(';') >>
         ( Node::Existing { name: NodeName::Full(name),
@@ -590,8 +590,8 @@ named_args!(parse_amend(input_len: usize)<Node>, comments_ws!(alt!(
             map!(parse_ref, |x| NodeName::Ref(x))
         ) >>
         char!('{') >>
-        props: many0!(apply!(parse_prop, input_len)) >>
-        subnodes: many0!(apply!(parse_node, input_len)) >>
+        props: many0!(call!(parse_prop, input_len)) >>
+        subnodes: many0!(call!(parse_node, input_len)) >>
         char!('}') >>
         char!(';') >>
         ( Node::Existing { name: name,
@@ -603,13 +603,13 @@ named_args!(parse_amend(input_len: usize)<Node>, comments_ws!(alt!(
 )));
 
 named_args!(parse_device_tree(input_len: usize)<Node>,
-            comments_ws!(preceded!(peek!(char!('/')), apply!(parse_node, input_len))));
+            comments_ws!(preceded!(peek!(char!('/')), call!(parse_node, input_len))));
 
 named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
     tag!("/dts-v1/;") >>
     mem_reserves: many0!(parse_mem_reserve) >>
-    device_tree: apply!(parse_device_tree, input_len) >>
-    amendments: many0!(apply!(parse_amend, input_len)) >>
+    device_tree: call!(parse_device_tree, input_len) >>
+    amendments: many0!(call!(parse_amend, input_len)) >>
     // TODO: set boot cpu id - issue 8
     (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, amendments)
 )));
