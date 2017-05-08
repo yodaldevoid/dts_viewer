@@ -453,10 +453,6 @@ named!(pub escape_c_char<u8>, alt!(
 ));
 
 fn parse_cell(input: &[u8], bits: usize) -> IResult<&[u8], (u64, Option<String>)> {
-    if bits != 8 && bits != 16 && bits != 32 && bits != 64 {
-        return IResult::Error(error_position!(ErrorKind::Custom(1), input));
-    }
-
     let parse_cell_internal = closure!(do_parse!(
         num: opt!(alt!(
             parse_c_expr |
@@ -475,7 +471,7 @@ fn parse_cell(input: &[u8], bits: usize) -> IResult<&[u8], (u64, Option<String>)
         if let IResult::Done(_, (num, _)) = result {
             let mask = (1 << bits) - 1;
             if (num > mask) && ((num | mask) != u64::max_value()) {
-                return IResult::Error(error_position!(ErrorKind::Custom(1), input));
+                return IResult::Error(error_position!(ErrorKind::Verify, input));
             }
         }
     }
@@ -504,14 +500,16 @@ named!(parse_data<Data>, comments_ws!(alt!(
         char!('"')
     ) |
     do_parse!(
-        bits: opt!(complete!(comments_ws!(preceded!(
-            tag!("/bits/"),
-            flat_map!(take_until!("<"), integer)
-        )))) >>
+        bits: verify!(
+            map!(opt!(complete!(comments_ws!(preceded!(
+                tag!("/bits/"),
+                flat_map!(take_until!("<"), integer)
+            )))), |b: Option<u64>| b.unwrap_or(32)),
+        |b| b == 8 || b == 16 || b == 32 || b == 64 ) >>
         char!('<') >>
-        val: separated_nonempty_list!(eat_junk, apply!(parse_cell, bits.unwrap_or(32) as usize)) >>
+        val: separated_nonempty_list!(eat_junk, apply!(parse_cell, bits as usize)) >>
         char!('>') >>
-        ( Data::Cells(bits.unwrap_or(32) as usize, val) )
+        ( Data::Cells(bits as usize, val) )
     ) |
     delimited!(
         char!('['),
