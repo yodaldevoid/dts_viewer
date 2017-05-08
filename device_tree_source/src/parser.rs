@@ -404,6 +404,23 @@ named!(parse_ref<String>, alt!(
     )
 ));
 
+named!(transform<Vec<u8>>, escaped_transform!(take_until_either!("\\\""), '\\', alt!(
+    tag!("a")   => { |_| vec![b'\x07'] } |
+    tag!("b")   => { |_| vec![b'\x08'] } |
+    tag!("t")   => { |_| vec![b'\t'] } |
+    tag!("n")   => { |_| vec![b'\n'] } |
+    tag!("v")   => { |_| vec![b'\x0B'] } |
+    tag!("f")   => { |_| vec![b'\x0C'] } |
+    tag!("r")   => { |_| vec![b'\r'] } |
+    tag!("\\")  => { |_| vec![b'\\'] } |
+    tag!("\"")  => { |_| vec![b'\"'] } |
+    preceded!(
+        tag_no_case!("x"),
+        map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u8>)
+    ) => { |c| vec![c] } |
+    map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>) => { |c| vec![c] }
+)));
+
 /// Parse a slice of bytes as a `String`, replacing escape codes with the
 /// appropriate character. Characters may be described as a C-style escape code.
 /// All hexadecimal and octal escape codes work up to 0x7f or x177,
@@ -411,23 +428,10 @@ named!(parse_ref<String>, alt!(
 /// `parser::escape_c_char` if a conversion of a character beyond this change is
 /// needed.
 named!(pub escape_c_string<String>, map_res!(
-    escaped_transform!(take_until_either!("\\\""), '\\',
-        alt!(
-            tag!("a")   => { |_| vec![b'\x07'] } |
-            tag!("b")   => { |_| vec![b'\x08'] } |
-            tag!("t")   => { |_| vec![b'\t'] } |
-            tag!("n")   => { |_| vec![b'\n'] } |
-            tag!("v")   => { |_| vec![b'\x0B'] } |
-            tag!("f")   => { |_| vec![b'\x0C'] } |
-            tag!("r")   => { |_| vec![b'\r'] } |
-            tag!("\\")  => { |_| vec![b'\\'] } |
-            tag!("\"")  => { |_| vec![b'\"'] } |
-            preceded!(
-                tag_no_case!("x"),
-                map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u8>)
-            ) => { |c| vec![c] } |
-            map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>) => { |c| vec![c] }
-        )),
+    alt!(
+        call!(transform) |
+        map!(verify!(take_until!("\""), |s: &[u8]| s.is_empty()), |_| vec![])
+    ),
     String::from_utf8)
 );
 
@@ -505,10 +509,7 @@ named!(parse_data_cells<Data>, do_parse!(
 named!(parse_data<Data>, comments_ws!(alt!(
     delimited!(
         char!('"'),
-        do_parse!(
-            val: escape_c_string >>
-            (Data::String(val))
-        ),
+        map!(escape_c_string, |s| Data::String(s)),
         char!('"')
     ) |
     call!(parse_data_cells) |
@@ -803,6 +804,17 @@ mod tests {
             IResult::Done(
                 &b""[..],
                 Data::String("\x7f\0stuffstuff\t\t\t\n\n\n".to_owned())
+            )
+        );
+    }
+
+    #[test]
+    fn data_string_empty() {
+        assert_eq!(
+            parse_data(b"\"\""),
+            IResult::Done(
+                &b""[..],
+                Data::String("".to_owned())
             )
         );
     }
