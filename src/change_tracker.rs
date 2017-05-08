@@ -55,7 +55,13 @@ impl<'a> LabelStore<'a> {
                         unimplemented!();
                     }
                 }
-                Node::Deleted { .. } => unreachable!(),
+                Node::Deleted { ref name, .. } => {
+                    if self.labels.contains_key(name.as_str()) {
+                        self.fill_internal(Path::new(""), node);
+                    } else {
+                        unimplemented!();
+                    }
+                }
             }
         }
     }
@@ -63,11 +69,18 @@ impl<'a> LabelStore<'a> {
     fn fill_internal(&mut self, path: &Path, node: &'a Node) {
         match *node {
             Node::Deleted { ref name, .. } => {
-                let node_path = path.join(name);
+                let node_path = match *name {
+                    NodeName::Full(ref name) => path.join(name),
+                    NodeName::Ref(ref label) => {
+                        self.path_from_label(label).unwrap().to_owned()
+                    }
+                };
+
                 self.delete_labels(&node_path);
 
+
                 self.paths
-                    .entry(path.join(name))
+                    .entry(node_path.clone())
                     .or_insert_with(Vec::new)
                     .push(Element::Node(node));
 
@@ -94,7 +107,7 @@ impl<'a> LabelStore<'a> {
             Node::Existing { ref name, ref proplist, ref children, ref labels, .. } => {
                 let node_path = match *name {
                     NodeName::Full(ref name) => path.join(name),
-                    NodeName::Label(ref label) => {
+                    NodeName::Ref(ref label) => {
                         self.path_from_label(label).unwrap().to_owned()
                     }
                 };

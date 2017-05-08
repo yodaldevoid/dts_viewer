@@ -522,7 +522,7 @@ named!(parse_data<Data>, comments_ws!(alt!(
         ),
         char!(']')
     ) |
-    do_parse!(val: parse_ref >> (Data::Reference(val)))
+    map!(parse_ref, |x| (Data::Reference(x)))
 )));
 
 named_args!(parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
@@ -554,7 +554,7 @@ named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
         tag!("/delete-node/") >>
         name: map!(map_res!(take_while1!(is_prop_node_char), str::from_utf8), String::from) >>
         char!(';') >>
-        ( Node::Deleted { name: name, offset: input_len - offset } )
+        ( Node::Deleted { name: NodeName::Full(name), offset: input_len - offset } )
     ) |
     do_parse!(
         offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
@@ -576,23 +576,32 @@ named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
     )
 )));
 
-named_args!(parse_ammend(input_len: usize)<Node>, comments_ws!(do_parse!(
-    offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
-    labels: many0!(terminated!(parse_label, char!(':'))) >>
-    name: alt!(
-        map!(map!(map_res!(tag!("/"), str::from_utf8), String::from), |x| NodeName::Full(x)) |
-        map!(call!(parse_ref), |x| NodeName::Label(x))
-    ) >>
-    char!('{') >>
-    props: many0!(apply!(parse_prop, input_len)) >>
-    subnodes: many0!(apply!(parse_node, input_len)) >>
-    char!('}') >>
-    char!(';') >>
-    ( Node::Existing { name: name,
-                       proplist: props,
-                       children: subnodes,
-                       labels: labels,
-                       offset: input_len - offset } )
+named_args!(parse_ammend(input_len: usize)<Node>, comments_ws!(alt!(
+    do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
+        tag!("/delete-node/") >>
+        name: parse_ref >>
+        char!(';') >>
+        ( Node::Deleted { name: NodeName::Ref(name), offset: input_len - offset } )
+    ) |
+    do_parse!(
+        offset: map!(peek!(rest), |x: &[u8]| x.len()) >>
+        labels: many0!(terminated!(parse_label, char!(':'))) >>
+        name: alt!(
+            map!(map!(map_res!(tag!("/"), str::from_utf8), String::from), |x| NodeName::Full(x)) |
+            map!(parse_ref, |x| NodeName::Ref(x))
+        ) >>
+        char!('{') >>
+        props: many0!(apply!(parse_prop, input_len)) >>
+        subnodes: many0!(apply!(parse_node, input_len)) >>
+        char!('}') >>
+        char!(';') >>
+        ( Node::Existing { name: name,
+                           proplist: props,
+                           children: subnodes,
+                           labels: labels,
+                           offset: input_len - offset } )
+    )
 )));
 
 named_args!(parse_device_tree(input_len: usize)<Node>,

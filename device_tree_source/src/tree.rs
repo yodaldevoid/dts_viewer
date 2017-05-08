@@ -33,7 +33,7 @@ impl Labeled for ReserveInfo {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Node {
-    Deleted { name: String, offset: usize },
+    Deleted { name: NodeName, offset: usize },
     Existing {
         name: NodeName,
         proplist: Vec<Property>,
@@ -103,14 +103,14 @@ impl fmt::Display for Node {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum NodeName {
-    Label(String),
+    Ref(String),
     Full(String),
 }
 
 impl fmt::Display for NodeName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            NodeName::Label(ref name) |
+            NodeName::Ref(ref name) |
             NodeName::Full(ref name) => write!(f, "{}", name),
         }
     }
@@ -119,7 +119,7 @@ impl fmt::Display for NodeName {
 impl NodeName {
     pub fn as_str(&self) -> &str {
         match *self {
-            NodeName::Label(ref name) |
+            NodeName::Ref(ref name) |
             NodeName::Full(ref name) => name,
         }
     }
