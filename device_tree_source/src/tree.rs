@@ -189,7 +189,7 @@ impl fmt::Display for Property {
 pub enum Data {
     Reference(String),
     String(String),
-    Cells(usize, Vec<(u64, Option<String>)>),
+    Cells(usize, Vec<Cell>),
     ByteArray(Vec<u8>),
 }
 
@@ -206,15 +206,9 @@ impl fmt::Display for Data {
                 write!(f, "<")?;
                 if !cells.is_empty() {
                     let mut iter = cells.iter();
-                    match *iter.next().unwrap() {
-                        (_, Some(ref s)) => write!(f, "&{}", s)?,
-                        (i, None) => write!(f, "{}", i)?,
-                    }
-                    for d in iter {
-                        match *d {
-                            (_, Some(ref s)) => write!(f, ", &{}", s)?,
-                            (i, None) => write!(f, ", {}", i)?,
-                        }
+                    write!(f, "{}", iter.next().unwrap())?;
+                    for c in iter {
+                        write!(f, "{}", c)?;
                     }
                 }
                 write!(f, ">")?;
@@ -230,6 +224,24 @@ impl fmt::Display for Data {
                 }
                 write!(f, " ]")?;
             }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum Cell {
+    Num(u64),
+    Ref(String, Option<u64>),
+}
+
+impl fmt::Display for Cell {
+    // TODO: labels - issue 3 - issue 6
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Cell::Num(i) => write!(f, "{}", i)?,
+            Cell::Ref(ref s, _) => write!(f, "&{}", s)?,
         }
 
         Ok(())

@@ -6,7 +6,7 @@ use std::num::ParseIntError;
 use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alpha, line_ending,
           not_line_ending, multispace, space, rest};
 
-use tree::{BootInfo, ReserveInfo, Node, NodeName, Property, Data};
+use tree::{BootInfo, ReserveInfo, Node, NodeName, Property, Data, Cell};
 use ::ParseError;
 
 // Copied and modified from rust-lang/rust/src/libcore/num/mod.rs
@@ -169,7 +169,7 @@ enum Token {
 
 fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
     let mut stack = Vec::new();
-    // println!("Input: {:?}", String::from_utf8_lossy(&input[..20]));
+    // println!("Input: {:?}", String::from_utf8_lossy(input));
     let mut buf = input;
     loop {
         // println!("Stack: {:?}", stack);
@@ -452,32 +452,29 @@ named!(pub escape_c_char<u8>, alt!(
     take!(1) => { |c: &[u8]| c[0] }
 ));
 
-fn parse_cell(input: &[u8], bits: usize) -> IResult<&[u8], (u64, Option<String>)> {
-    let parse_cell_internal = closure!(do_parse!(
-        num: opt!(alt!(
-            parse_c_expr |
-            map!(delimited!(
-                char!('\''),
-                escape_c_char,
-                char!('\'')
-            ), u64::from)
-        )) >>
-        r: cond!(bits == 32 && num.is_none(), parse_ref) >>
-        (num.unwrap_or(0), r)
-    ));
-
-    let result = parse_cell_internal(input);
-    if bits != 64 {
-        if let IResult::Done(_, (num, _)) = result {
-            let mask = (1 << bits) - 1;
-            if (num > mask) && ((num | mask) != u64::max_value()) {
-                return IResult::Error(error_position!(ErrorKind::Verify, input));
+named_args!(parse_cell(bits: usize)<Cell>, 
+    alt!(
+        map!(verify!(
+            alt!(
+                map!(delimited!(
+                    char!('\''),
+                    escape_c_char,
+                    char!('\'')
+                ), u64::from) |
+                parse_c_expr
+            ),
+            |num| {
+                if bits != 64 {
+                    let mask = (1 << bits) - 1;
+                    !((num > mask) && ((num | mask) != u64::max_value()))
+                } else {
+                    true
+                }
             }
-        }
-    }
-
-    result
-}
+        ), |num| Cell::Num(num)) |
+        map!(cond_reduce!(bits == 32, parse_ref), |s| Cell::Ref(s, None))
+    )
+);
 
 named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
     labels: many0!(terminated!(parse_label, char!(':'))) >>
@@ -487,6 +484,21 @@ named!(parse_mem_reserve<ReserveInfo>, comments_ws!(do_parse!(
     char!(';') >>
     (ReserveInfo { address: addr, size: size, labels: labels })
 )));
+
+named!(parse_data_cells<Data>, do_parse!(
+    bits: verify!(
+        map!(opt!(complete!(comments_ws!(preceded!(
+            tag!("/bits/"),
+            flat_map!(take_until!("<"), integer)
+        )))), |b: Option<u64>| b.unwrap_or(32)),
+    |b| b == 8 || b == 16 || b == 32 || b == 64 ) >>
+    val: delimited!(
+        comments_ws!(char!('<')),
+            separated_list!(eat_junk, call!(parse_cell, bits as usize)),
+        comments_ws!(char!('>'))
+    ) >>
+    ( Data::Cells(bits as usize, val) )
+));
 
 // TODO: labels in data - issue 6
 // TODO: include binary - issue 7
@@ -499,18 +511,7 @@ named!(parse_data<Data>, comments_ws!(alt!(
         ),
         char!('"')
     ) |
-    do_parse!(
-        bits: verify!(
-            map!(opt!(complete!(comments_ws!(preceded!(
-                tag!("/bits/"),
-                flat_map!(take_until!("<"), integer)
-            )))), |b: Option<u64>| b.unwrap_or(32)),
-        |b| b == 8 || b == 16 || b == 32 || b == 64 ) >>
-        char!('<') >>
-        val: separated_nonempty_list!(eat_junk, apply!(parse_cell, bits as usize)) >>
-        char!('>') >>
-        ( Data::Cells(bits as usize, val) )
-    ) |
+    call!(parse_data_cells) |
     delimited!(
         char!('['),
         do_parse!(
@@ -695,7 +696,7 @@ mod tests {
                 &b""[..],
                 Property::Existing {
                     name: "cell_prop".to_owned(),
-                    val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
+                    val: Some(vec![Data::Cells(32, vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)])]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -752,7 +753,7 @@ mod tests {
                     val: Some(vec![
                         Data::String("abc".to_owned()),
                         Data::ByteArray(vec![0x12, 0x34]),
-                        Data::Cells(32, vec![(0xa, None), (0xb, None), (0xc, None)])
+                        Data::Cells(32, vec![Cell::Num(0xa), Cell::Num(0xb), Cell::Num(0xc)])
                     ]),
                     labels: Vec::new(),
                     offset: 0,
@@ -770,7 +771,7 @@ mod tests {
                 &b""[..],
                 Property::Existing {
                     name: "test_prop".to_owned(),
-                    val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
+                    val: Some(vec![Data::Cells(32, vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)])]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -787,7 +788,7 @@ mod tests {
                 &b""[..],
                 Property::Existing {
                     name: "test_prop".to_owned(),
-                    val: Some(vec![Data::Cells(32, vec![(1, None), (2, None), (10, None)])]),
+                    val: Some(vec![Data::Cells(32, vec![Cell::Num(1), Cell::Num(2), Cell::Num(10)])]),
                     labels: Vec::new(),
                     offset: 0,
                 }
@@ -811,8 +812,8 @@ mod tests {
         assert_eq!(
             parse_data(b"/bits/ 8 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xde>"),
             IResult::Done(&b""[..], Data::Cells(8, vec![
-                (b'\r' as u64, None), (b'b' as u64, None), (0, None),
-                (b'\'' as u64, None), (0xFF, None), (0xDE, None)
+                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
+                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDE)
             ]))
         );
     }
@@ -822,8 +823,8 @@ mod tests {
         assert_eq!(
             parse_data(b"/bits/ 16 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdead>"),
             IResult::Done(&b""[..], Data::Cells(16, vec![
-                (b'\r' as u64, None), (b'b' as u64, None), (0, None),
-                (b'\'' as u64, None), (0xFF, None), (0xDEAD, None)
+                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
+                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDEAD)
             ]))
         );
     }
@@ -833,8 +834,8 @@ mod tests {
         assert_eq!(
             parse_data(b"/bits/ 32 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef>"),
             IResult::Done(&b""[..], Data::Cells(32, vec![
-                (b'\r' as u64, None), (b'b' as u64, None), (0, None),
-                (b'\'' as u64, None), (0xFF, None), (0xDEADBEEF, None)
+                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
+                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDEADBEEF)
             ]))
         );
     }
@@ -844,8 +845,8 @@ mod tests {
         assert_eq!(
             parse_data(b"/bits/ 64 <'\\r' 'b' '\\0' '\\'' '\\xff' 0xdeadbeef00000000>"),
             IResult::Done(&b""[..], Data::Cells(64, vec![
-                (b'\r' as u64, None), (b'b' as u64, None), (0, None),
-                (b'\'' as u64, None), (0xFF, None), (0xDEADBEEF00000000, None)
+                Cell::Num(b'\r' as u64), Cell::Num(b'b' as u64), Cell::Num(0),
+                Cell::Num(b'\'' as u64), Cell::Num(0xFF), Cell::Num(0xDEADBEEF00000000)
             ]))
         );
     }
@@ -854,7 +855,7 @@ mod tests {
     fn data_cell_sized_default() {
         assert_eq!(
             parse_data(b"<0x12345678 0x0000ffff>"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![(0x12345678, None), (0x0000FFFF, None)]))
+            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Num(0x12345678), Cell::Num(0x0000FFFF)]))
         );
     }
 
@@ -863,7 +864,7 @@ mod tests {
         assert_eq!(
             parse_data(b"/bits/ 16 <0x1234 0x5678 0x0 0xffff>"),
             IResult::Done(&b""[..], Data::Cells(16,
-                vec![(0x1234, None), (0x5678, None), (0, None), (0xFFFF, None)]
+                vec![Cell::Num(0x1234), Cell::Num(0x5678), Cell::Num(0), Cell::Num(0xFFFF)]
             ))
         );
     }
@@ -888,7 +889,15 @@ mod tests {
     fn data_cell_ref() {
         assert_eq!(
             parse_data(b"<&ref>"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![(0, Some("ref".to_owned()))]))
+            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Ref("ref".to_owned(), None)]))
+        );
+    }
+
+    #[test]
+    fn data_cell_empty() {
+        assert_eq!(
+            parse_data(b"<>"),
+            IResult::Done(&b""[..], Data::Cells(32, Vec::new()))
         );
     }
 
@@ -936,7 +945,7 @@ mod tests {
     fn math_cell_1() {
         assert_eq!(
             parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) >"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![(272, None)]))
+            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Num(272)]))
         );
     }
 
@@ -944,7 +953,7 @@ mod tests {
     fn math_cell_2() {
         assert_eq!(
             parse_data(b"< ((((0x910)) & 0xffff) - (0x800)) (0 | 3) >"),
-            IResult::Done(&b""[..], Data::Cells(32, vec![(272, None), (3, None)]))
+            IResult::Done(&b""[..], Data::Cells(32, vec![Cell::Num(272), Cell::Num(3)]))
         );
     }
 }
