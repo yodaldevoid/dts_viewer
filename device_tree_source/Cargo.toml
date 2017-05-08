@@ -11,5 +11,9 @@ repository = "https://github.com/yodaldevoid/dts_viewer"
 nom = { version = "^2.1", features = ["verbose-errors"] }
 
 [dev-dependencies]
-mktemp = "^0.3"
-rayon = "^0.7"
+mktemp = "0.3"
+rustc-test = "0.1.4"
+
+[[test]]
+name = "iter_dts_files"
+harness = false
