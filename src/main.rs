@@ -10,13 +10,11 @@ use std::path::{Path, PathBuf};
 use std::io::{self, BufRead, Write};
 use std::iter::Iterator;
 use std::fmt::{self, Display, Formatter};
-// use std::fs::File;
 
 use mktemp::Temp;
 
 use device_tree_source::parser::{ParseResult, parse_dt};
 use device_tree_source::tree::Offset;
-
 use device_tree_source::include::{IncludeBounds, IncludeMethod, IncludeError, BoundsError,
                                   include_files, get_bounds_containing_offset};
 
@@ -51,7 +49,7 @@ fn main() {
     let file_name = matches.value_of("file").unwrap();
     let parent = Path::new(file_name).parent().expect("Could not get parent directory of file");
 
-    let cpp_temp_out = Temp::new_file().expect("Could not create temp file");
+    let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
 
     let mut cpp_command = Command::new("gcc");
     cpp_command.args(&["-E", "-nostdinc"])
@@ -76,11 +74,14 @@ fn main() {
         }
     }
 
+    // println!("{:?}", cpp_command);
+
     let include_output = cpp_command.output().expect("Failed to start CPP");
-    let cpp_stderr = String::from_utf8_lossy(&include_output.stderr);
     if !include_output.status.success() {
+        // Done to prevent a panic as the file will not have been written to
+        cpp_temp_out.release();
         println!("Failed to execute CPP. Error message is below.");
-        print!("{}", cpp_stderr);
+        print!("{}", String::from_utf8_lossy(&include_output.stderr));
         return;
     }
 
@@ -108,6 +109,7 @@ fn main() {
 
     // println!("{:#?}", bounds);
     // {
+    //     use std::fs::File;
     //     let mut total_dts_dump = File::create("total_dts_dump.dts").unwrap();
     //     total_dts_dump.write_all(&buffer).unwrap()
     // }
