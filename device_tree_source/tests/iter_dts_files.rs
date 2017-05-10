@@ -38,7 +38,7 @@ fn main() {
 }
 
 fn try_parse(file_name: PathBuf) {
-    let cpp_temp_out = Temp::new_file().expect("\nCould not create temp file");
+    let mut cpp_temp_out = Temp::new_file().expect("\nCould not create temp file");
     let include_output = {
         let parent = file_name.parent().expect("\nCould not get parent directory of file");
 
@@ -60,6 +60,8 @@ fn try_parse(file_name: PathBuf) {
     };
 
     if !include_output.status.success() {
+        // Done to prevent a panic as the file will not have been written to
+        cpp_temp_out.release();
         panic!("\nFailed to execute CPP. Error message is below.\n{}",
                String::from_utf8_lossy(&include_output.stderr));
     }
