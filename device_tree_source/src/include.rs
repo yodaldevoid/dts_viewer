@@ -416,14 +416,12 @@ fn find_include<'a>(buf: &'a [u8]) -> Option<(&'a [u8], PathBuf, &'a [u8])> {
 /// file included by an `/include/` statement. This should never happen, and if
 /// it does that file needs to be cleaned up.
 pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
-    fn _include_files(dir: Option<&Path>,
-                      path: &Path,
+    fn _include_files(path: &Path,
                       main_offset: usize)
                       -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
-        let path = dir.unwrap_or(&PathBuf::default()).join(path);
-        let mut file = match File::open(&path) {
+        let mut file = match File::open(path) {
             Ok(f) => f,
-            Err(e) => return Err(IncludeError::IOError(e, Some(path.clone()))),
+            Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
         };
         let mut buffer: Vec<u8> = Vec::new();
         let mut bounds: Vec<IncludeBounds> = Vec::new();
@@ -444,7 +442,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
             )
         );
 
-        let (start_bound, file_dir) = if let IResult::Done(rem, (line, marker)) = first_linemarker(buf) {
+        let start_bound = if let IResult::Done(rem, (line, marker)) = first_linemarker(buf) {
             let bound = IncludeBounds {
                 path: marker.path.clone(),
                 global_start: buf.len() - rem.len(),
@@ -467,22 +465,20 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
             buffer.extend_from_slice(line);
             buf = rem;
 
-            (bound, marker.path.parent().map(|p| p.to_owned()).unwrap_or(PathBuf::default()))
+            bound
         } else {
             // println!("main_offset {}", main_offset);
-            let bound = IncludeBounds {
-                path: path.clone(),
+            IncludeBounds {
+                path: path.to_owned(),
                 global_start: main_offset,
                 child_start: 0,
                 len: match File::open(&path) {
                         Ok(f) => f,
-                        Err(e) => return Err(IncludeError::IOError(e, Some(path.clone()))),
+                        Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
                     }
                     .bytes().count(),
                 method: IncludeMethod::DTS,
-            };
-
-            (bound, path.parent().map(|p| p.to_owned()).unwrap_or(PathBuf::default()))
+            }
         };
         bounds.push(start_bound);
 
@@ -496,9 +492,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
             // println!("{}", bounds);
 
             let total_len = buffer.len() + main_offset; // - 1;
-            let (sub_buf, sub_bounds) = _include_files(dir.or(Some(&file_dir)),
-                                                       &included_path,
-                                                       total_len)?;
+            let (sub_buf, sub_bounds) = _include_files(&included_path, total_len)?;
             buffer.extend(sub_buf);
 
             let inc_start = sub_bounds.first()
@@ -527,7 +521,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
         Ok((buffer, bounds))
     }
 
-    _include_files(None, path.as_ref(), 0)
+    _include_files(path.as_ref(), 0)
 }
 
 #[cfg(test)]
