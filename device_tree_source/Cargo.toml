@@ -12,6 +12,7 @@ nom = { version = "^2.1", features = ["verbose-errors"] }
 
 [dev-dependencies]
 mktemp = "0.3"
+walkdir = "1"
 rustc-test = "0.1.4"
 
 [[test]]

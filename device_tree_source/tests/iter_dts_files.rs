@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 extern crate device_tree_source;
+extern crate walkdir;
 extern crate mktemp;
 extern crate test;
 
@@ -8,6 +9,7 @@ use std::env::args;
 use std::process::Command;
 use std::path::{PathBuf, Path};
 
+use walkdir::WalkDir;
 use mktemp::Temp;
 
 use test::{test_main, TestDesc, TestDescAndFn, DynTestName, DynTestFn, ShouldPanic};
@@ -23,22 +25,23 @@ fn main() {
     ::std::env::set_current_dir(&new_dir) 
         .expect("Could not change current directory. Does tests/dts exist?");
 
-    let tests = Path::new(".")
-                    .read_dir().unwrap()
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.file_name().to_string_lossy().ends_with(".dts"))
-                    .map(|d| d.path())
-                    .map(|p| {
-                        TestDescAndFn {
-                            desc: TestDesc {
-                                name: DynTestName(format!("{}", p.display())),
-                                ignore: true,
-                                should_panic: ShouldPanic::No,
-                            },
-                            testfn: DynTestFn(Box::new(move || try_parse(p.clone()))),
-                        }
-                    })
-                    .collect();
+    let tests = WalkDir::new(".")
+                       .follow_links(true)
+                       .into_iter()
+                       .filter_map(|e| e.ok())
+                       .filter(|e| e.file_name().to_string_lossy().ends_with(".dts"))
+                       .map(|d| d.path().to_owned())
+                       .map(|p| {
+                           TestDescAndFn {
+                               desc: TestDesc {
+                                   name: DynTestName(format!("{}", p.display())),
+                                   ignore: true,
+                                   should_panic: ShouldPanic::No,
+                               },
+                               testfn: DynTestFn(Box::new(move || try_parse(p.clone()))),
+                           }
+                       })
+                       .collect();
     test_main(&args, tests);
 }
 
