@@ -47,9 +47,8 @@ fn main() {
         .get_matches();
 
     let file_name = matches.value_of("file").unwrap();
-    let parent = Path::new(file_name).parent().expect("Could not get parent directory of file");
-
     let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
+    let mut include_dirs = Vec::new();
 
     let mut cpp_command = Command::new("gcc");
     cpp_command.args(&["-E", "-nostdinc"])
@@ -58,18 +57,26 @@ fn main() {
         .arg(&file_name);
 
     if !matches.is_present("no_defaults") {
-        cpp_command.args(&["-I", parent.to_str().unwrap()]);
-        let include_dir = parent.join("include/");
-        if include_dir.is_dir() {
-            cpp_command.args(&["-I", include_dir.to_str().unwrap()]);
+        cpp_command.args(&["-I", "."]);
+        include_dirs.push(Path::new("."));
+        if Path::new("include").is_dir() {
+            cpp_command.args(&["-I", "include/"]);
+            include_dirs.push(Path::new("include/"));
+        }
+
+        if let Some(parent) = Path::new(file_name).parent() {
+            cpp_command.args(&["-I", &parent.to_string_lossy()]);
+            include_dirs.push(&parent);
+        } else {
+            println!("Could not get parent directory of file");
         }
     }
 
     if let Some(includes) = matches.values_of("include") {
         for include in includes {
-            let include_dir = parent.join(include);
-            if include_dir.is_dir() {
-                cpp_command.args(&["-I", include_dir.to_str().unwrap()]);
+            if Path::new(include).is_dir() {
+                cpp_command.args(&["-I", include]);
+                include_dirs.push(Path::new(include));
             }
         }
     }
@@ -85,7 +92,7 @@ fn main() {
         return;
     }
 
-    let (buffer, bounds) = match include_files(&cpp_temp_out) {
+    let (buffer, bounds) = match include_files(&cpp_temp_out, &include_dirs) {
         Ok(x) => x,
         Err(e) => {
             match e {

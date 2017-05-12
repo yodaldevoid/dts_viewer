@@ -399,12 +399,21 @@ fn find_include<'a>(buf: &'a [u8]) -> Option<(&'a [u8], PathBuf, &'a [u8])> {
 }
 
 /// Parses `/include/` statements in the file returning a buffer with all files
-/// included and the bounds of each included file. If C style `#include`
-/// statements need to be parsed that step should be performed before calling
-/// this function on the file output from that step.
+/// included.
 ///
-/// The `IncludeBounds` can be ignored if tracing from the final buffer to the
+/// Also returns the bounds of each included file within the buffer to allow
+/// mapping from the buffer to the original files. See
+/// `IncludeBounds::file_line_from_global` for more information. The
+/// `IncludeBounds` can be ignored if mapping from the final buffer to the
 /// original file is not needed.
+/// 
+/// If C style `#include` statements need to be parsed that step should be
+/// performed, usually by running CPP, before calling this function on the file
+/// output from that step.
+///
+/// `include_dirs` should be a list of all directories to search for included
+/// files. No directories are assumed, including the current directory. If no
+/// directories are  passed in, the function will fail.
 ///
 /// # Errors
 /// Returns `IOError` if any file cannot be opened.
@@ -415,11 +424,22 @@ fn find_include<'a>(buf: &'a [u8]) -> Option<(&'a [u8], PathBuf, &'a [u8])> {
 /// Returns `LinemarkerInDtsi` if a C preprocessor linemarker is found within a
 /// file included by an `/include/` statement. This should never happen, and if
 /// it does that file needs to be cleaned up.
-pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
+pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]) -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
     fn _include_files(path: &Path,
+                      include_dirs: &[&Path],
                       main_offset: usize)
                       -> Result<(Vec<u8>, Vec<IncludeBounds>), IncludeError> {
-        let mut file = match File::open(path) {
+        fn find_file(path: &Path, include_dirs: &[&Path]) -> Result<PathBuf, IncludeError> {
+            for dir in include_dirs.iter() {
+                let p = dir.join(path);
+                if p.is_file() {
+                    return Ok(p);
+                }
+            }
+            Err(IncludeError::IOError(io::Error::from(io::ErrorKind::NotFound), Some(path.to_owned())))
+        }
+        let path = find_file(path, include_dirs)?;
+        let mut file = match File::open(&path) {
             Ok(f) => f,
             Err(e) => return Err(IncludeError::IOError(e, Some(path.to_owned()))),
         };
@@ -492,7 +512,7 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
             // println!("{}", bounds);
 
             let total_len = buffer.len() + main_offset; // - 1;
-            let (sub_buf, sub_bounds) = _include_files(&included_path, total_len)?;
+            let (sub_buf, sub_bounds) = _include_files(&included_path, include_dirs, total_len)?;
             buffer.extend(sub_buf);
 
             let inc_start = sub_bounds.first()
@@ -521,7 +541,9 @@ pub fn include_files<P: AsRef<Path>>(path: P) -> Result<(Vec<u8>, Vec<IncludeBou
         Ok((buffer, bounds))
     }
 
-    _include_files(path.as_ref(), 0)
+    _include_files(file.as_ref(),
+                   &include_dirs.iter().map(|p| p.as_ref()).collect::<Vec<_>>(),
+                   0)
 }
 
 #[cfg(test)]

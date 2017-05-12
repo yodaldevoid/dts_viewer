@@ -44,31 +44,39 @@ fn main() {
 
 fn try_parse(file: PathBuf) {
     let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
-    let include_output = {
-        let mut cpp_command = Command::new("gcc");
-        cpp_command.args(&["-E", "-nostdinc"])
-                   .args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
-                   .args(&["-o", cpp_temp_out.as_ref().to_str().unwrap()])
-                   .arg(file.to_str().unwrap())
-                   .args(&["-I", "."]);
+    let mut include_dirs = Vec::new();
 
-        if Path::new("include").is_dir() {
-            cpp_command.args(&["-I", "include/"]);
-        }
+    let mut cpp_command = Command::new("gcc");
+    cpp_command.args(&["-E", "-nostdinc"])
+               .args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
+               .args(&["-o", cpp_temp_out.as_ref().to_str().unwrap()])
+               .arg(file.to_str().unwrap())
+               .args(&["-I", "."]);
+    include_dirs.push(Path::new("."));
 
-        // println!("{:?}", cpp_command);
+    if Path::new("include").is_dir() {
+        cpp_command.args(&["-I", "include/"]);
+        include_dirs.push(Path::new("include/"));
+    }
 
-        cpp_command.output().expect("Failed to start CPP")
-    };
+    if let Some(parent) = file.parent() {
+        cpp_command.args(&["-I", &parent.to_string_lossy()]);
+        include_dirs.push(&parent);
+    } else {
+        panic!("Could not get parent directory of file");
+    }
+
+    let include_output = cpp_command.output().expect("Failed to start CPP");
 
     if !include_output.status.success() {
         // Done to prevent a panic as the file will not have been written to
         cpp_temp_out.release();
-        panic!("Failed to execute CPP.\n{}",
+        panic!("Failed to execute CPP.\n{:?}\n{}",
+               cpp_command,
                String::from_utf8_lossy(&include_output.stderr));
     }
 
-    let (buffer, bounds) = match include_files(&cpp_temp_out) {
+    let (buffer, bounds) = match include_files(&cpp_temp_out, &include_dirs) {
         Ok(x) => x,
         Err(e) => {
             match e {
