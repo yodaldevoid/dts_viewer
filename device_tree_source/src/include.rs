@@ -165,15 +165,15 @@ impl IncludeBounds {
             // println!("b.start: {} b.end: {} b.len: {}", b.start(), b.end(), b.len());
             if b.start() <= start && b.end() >= start {
                 // global_start -- start -- global_end
-                let remainder = b.end() - start;
+                let remainder = b.end() - start - offset;
 
                 // println!("remainder: {}", remainder);
 
                 remainders.push(IncludeBounds {
                     path: b.path.clone(),
                     global_start: end,
-                    child_start: b.start() + start - b.start() + offset,
-                    len: remainder, // - offset,
+                    child_start: start - b.start() + offset,
+                    len: remainder,
                     method: b.include_method().clone(),
                 });
 
@@ -449,8 +449,8 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
         let mut string_buffer = String::new();
         file.read_to_string(&mut string_buffer)?;
 
-        // println!("{}", string_buffer);
-        // println!();
+        // println!("{}", path.display());
+        // println!("{}\n", string_buffer);
 
         let mut buf = string_buffer.as_bytes();
 
@@ -507,11 +507,12 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
             buffer.extend_from_slice(pre);
 
             let offset = pre.len();
-            // println!("{}", file.display());
             // println!("Offset: {}", offset);
-            // println!("{}", bounds);
+            // println!("{}", String::from_utf8_lossy(&buffer));
+            // println!("{:#?}", bounds);
 
-            let total_len = buffer.len() + main_offset; // - 1;
+            // println!("buffer.len: {} main_offset: {}", buffer.len(), main_offset);
+            let total_len = buffer.len() + main_offset;
             let (sub_buf, sub_bounds) = _include_files(&included_path, include_dirs, total_len)?;
             buffer.extend(sub_buf);
 
@@ -523,7 +524,7 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
                                     .ok_or(IncludeError::NoBoundReturned(included_path.clone()))?;
             let eaten_len = (buf.len() - offset) - rem.len();
 
-            // println!("{:#?}", bounds);
+            // println!("{:#?}", sub_bounds);
             IncludeBounds::split_bounds(&mut bounds, inc_start, inc_end, eaten_len);
             bounds.extend_from_slice(&sub_bounds);
             bounds.sort();
