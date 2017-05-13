@@ -55,16 +55,22 @@ fn try_parse(file: PathBuf) {
                .args(&["-o", cpp_temp_out.as_ref().to_str().unwrap()])
                .arg(file.to_str().unwrap())
                .args(&["-I", "."]);
-    include_dirs.push(Path::new("."));
+    include_dirs.push(PathBuf::from("."));
 
     if Path::new("include").is_dir() {
         cpp_command.args(&["-I", "include/"]);
-        include_dirs.push(Path::new("include/"));
+        include_dirs.push(PathBuf::from("include/"));
     }
 
     if let Some(parent) = file.parent() {
         cpp_command.args(&["-I", &parent.to_string_lossy()]);
-        include_dirs.push(&parent);
+        include_dirs.push(parent.to_owned());
+
+        let include = parent.join("include");
+        if include.is_dir() {
+            cpp_command.args(&["-I", &include.to_string_lossy()]);
+            include_dirs.push(include);
+        }
     } else {
         panic!("Could not get parent directory of file");
     }

@@ -58,15 +58,21 @@ fn main() {
 
     if !matches.is_present("no_defaults") {
         cpp_command.args(&["-I", "."]);
-        include_dirs.push(Path::new("."));
+        include_dirs.push(PathBuf::from("."));
         if Path::new("include").is_dir() {
             cpp_command.args(&["-I", "include/"]);
-            include_dirs.push(Path::new("include/"));
+            include_dirs.push(PathBuf::from("include/"));
         }
 
         if let Some(parent) = Path::new(file_name).parent() {
             cpp_command.args(&["-I", &parent.to_string_lossy()]);
-            include_dirs.push(&parent);
+            include_dirs.push(parent.to_owned());
+
+            let include = parent.join("include");
+            if include.is_dir() {
+                cpp_command.args(&["-I", &include.to_string_lossy()]);
+                include_dirs.push(include);
+            }
         } else {
             println!("Could not get parent directory of file");
         }
@@ -76,7 +82,7 @@ fn main() {
         for include in includes {
             if Path::new(include).is_dir() {
                 cpp_command.args(&["-I", include]);
-                include_dirs.push(Path::new(include));
+                include_dirs.push(PathBuf::from(include));
             }
         }
     }
