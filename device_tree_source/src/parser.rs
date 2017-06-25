@@ -210,7 +210,7 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
                 if let Some(&Token::Number(a)) = stack.last() {
                     if (tok == OprInfix::Greater || tok == OprInfix::BitAnd) && stack.len() == 1 {
                         if let IResult::Done(cleaned, _) = eat_junk(matched) {
-                            let test = closure!(preceded!(
+                            named!(test, preceded!(
                                 eat_junk,
                                 alt!(
                                     tag!("(") |
