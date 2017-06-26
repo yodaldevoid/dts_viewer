@@ -1,4 +1,6 @@
 use std::fmt;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 pub trait Labeled {
     fn add_label(&mut self, label: &str);
@@ -36,9 +38,9 @@ pub enum Node {
     Deleted { name: NodeName, offset: usize },
     Existing {
         name: NodeName,
-        proplist: Vec<Property>,
-        children: Vec<Node>,
 
+        proplist: HashMap<String, Property>,
+        children: HashMap<String, Node>,
         // fullpath: Option<PathBuf>,
         // length to the # part of node_name@#
         // basenamelen: usize,
@@ -50,6 +52,17 @@ pub enum Node {
 
         offset: usize,
     },
+}
+
+impl Node {
+    /// Convenience function to get the NodeName no matter what form the
+    /// `Node`is in.
+    pub fn name(&self) -> &NodeName {
+        match *self {
+            Node::Deleted { ref name, .. } |
+            Node::Existing { ref name, .. } => name,
+        }
+    }
 }
 
 impl Labeled for Node {
@@ -82,10 +95,10 @@ impl fmt::Display for Node {
             Node::Deleted { ref name, .. } => write!(f, "// Node {} deleted", name)?,
             Node::Existing { ref name, ref proplist, ref children, .. } => {
                 writeln!(f, "{} {{", name)?;
-                for prop in proplist {
+                for prop in proplist.values() {
                     writeln!(f, "    {}", prop)?;
                 }
-                for node in children {
+                for node in children.values() {
                     match *node {
                         Node::Deleted { ref name, .. } => {
                             writeln!(f, "    // Node {} deleted", name)?
@@ -134,6 +147,17 @@ pub enum Property {
         labels: Vec<String>,
         offset: usize,
     },
+}
+
+impl Property {
+    /// Convenience function to get the name no matter what form the
+    /// `Property`is in.
+    pub fn name(&self) -> &str {
+        match *self {
+           Property::Deleted{ref name, ..} |
+           Property::Existing{ref name, ..} => name
+        }
+    }
 }
 
 impl Labeled for Property {

@@ -569,8 +569,12 @@ named_args!(parse_node(input_len: usize)<Node>, comments_ws!(alt!(
         char!('}') >>
         char!(';') >>
         ( Node::Existing { name: NodeName::Full(name),
-                           proplist: props,
-                           children: subnodes,
+                           proplist: props.into_iter()
+                                          .map(|p| (p.name().to_owned(), p))
+                                          .collect(),
+                           children: subnodes.into_iter()
+                                             .map(|n| (n.name().as_str().to_owned(), n))
+                                             .collect(),
                            labels: labels,
                            offset: input_len - offset } )
     )
@@ -597,8 +601,12 @@ named_args!(parse_amend(input_len: usize)<Node>, comments_ws!(alt!(
         char!('}') >>
         char!(';') >>
         ( Node::Existing { name: name,
-                           proplist: props,
-                           children: subnodes,
+                           proplist: props.into_iter()
+                                          .map(|p| (p.name().to_owned(), p))
+                                          .collect(),
+                           children: subnodes.into_iter()
+                                             .map(|n| (n.name().as_str().to_owned(), n))
+                                             .collect(),
                            labels: labels,
                            offset: input_len - offset } )
     )
