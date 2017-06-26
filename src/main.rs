@@ -38,7 +38,7 @@ use change_tracker::LabelStore;
 fn main() {
     let matches = clap_app!(dts_viewer =>
             (version: crate_version!())
-            (author: "Gabriel s. <ga29smith@gmail.com>")
+            (author: "Gabriel S. <ga29smith@gmail.com>")
             (@arg file: +required "DTS file to parse")
             (@arg no_defaults: -n --no_defaults "Disable default includes. \
                 An 'include' directory, if it exists, is automatically included")

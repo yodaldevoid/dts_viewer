@@ -13,7 +13,7 @@ use nom::{IResult, ErrorKind, Needed, FindSubstring, digit, space, multispace, l
 use parser::escape_c_string;
 use ::{byte_offset_to_line_col, line_to_byte_offset};
 
-/// Defines errors from manipulating IncludeBounds.
+/// Defines errors from manipulating `IncludeBounds`.
 // TODO: impl Display and Error - issue 1.2
 #[derive(Debug)]
 pub enum BoundsError {

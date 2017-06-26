@@ -1,26 +1,56 @@
+//! Contains the structures that represent the device tree.
+
 use std::fmt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
+/// Trait applied to all data structures in a device tree that can have a
+/// label/alias.
 pub trait Labeled {
+    /// Add a label to an object.
+    ///
+    /// #Errors
+    /// May fail if a variation of an object does not allow labels.
+    // TODO: code examples
     fn add_label(&mut self, label: &str) -> Result<(), ()>;
+
+    /// Gets a slice containing all the labels that point to the object. May
+    /// return an empty slice if there are no labels or the object does not
+    /// allow labels in its current form, such as will a deleted Node.
+    fn get_labels(&self) -> &[String];
 }
 
+/// Trait for objects that track their starting offset from within the global
+/// buffer.
 pub trait Offset {
+    /// Get the starting offset of the object.
     fn get_offset(&self) -> usize;
 }
 
-#[derive(Debug)]
+/// The boot info as specified by the Device Tree Specification. Includes the
+/// reserved memory info, the boot CPU ID, and the root node of the tree. The
+/// root node may not include any changes made by node specifications listed
+/// after the root node. These amendments are returned separately. See
+/// `parser::parse_dt`.
+#[derive(Debug, Clone)]
 pub struct BootInfo {
+    /// The reserved memory information.
     pub reserve_info: Vec<ReserveInfo>,
+    /// The boot CPU ID as specified by the device tree. Defaults to the first
+    /// CPU ID if not specified.
     pub boot_cpuid: u32,
+    /// The root node of the device tree. Will always be named '/'.
     pub root: Node,
 }
 
-#[derive(Debug)]
+/// Stores the information from a `/memreserve/` statement.
+#[derive(Debug, Clone)]
 pub struct ReserveInfo {
+    /// The starting address of the reserved memory section.
     pub address: u64,
+    /// The length in bytes of the reserved memory section.
     pub size: u64,
+    /// All labels to the `/memreserve/` statement.
     pub labels: Vec<String>,
 }
 
@@ -33,16 +63,44 @@ impl Labeled for ReserveInfo {
 
         Ok(())
     }
+
+    fn get_labels(&self) -> &[String] {
+        &self.labels
+    }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+/// A node in the device tree.
+///
+/// The node can have labels, contain properties, and contain other nodes. The
+/// node also tracks it's own offset in the buffer that it was parsed from.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Node {
-    Deleted { name: NodeName, offset: usize },
-    Existing {
+    /// A deleted node, made from a `/delete-node/` statement.
+    Deleted {
+        /// The name of the node, containing either as a ref or the final part
+        /// of the full path
         name: NodeName,
 
+        /// The offset in bytes that this `Node` was found at within the buffer
+        /// that the containing tree was parsed from.
+        offset: usize
+    },
+    /// A regular node.
+    Existing {
+        /// The name of the node, containing either as a ref or the final part
+        /// of the full path
+        name: NodeName,
+
+        /// The properties contained within this node. Stored in a hashmap with
+        /// the key being the name of the `Property` and the value the Property
+        /// its self.
         proplist: HashMap<String, Property>,
+
+        /// The child nodes contained within this node. Stored in a hashmap with
+        /// the key being the name of the child `Node` and the value the child
+        /// `Node` its self.
         children: HashMap<String, Node>,
+
         // fullpath: Option<PathBuf>,
         // length to the # part of node_name@#
         // basenamelen: usize,
@@ -50,8 +108,12 @@ pub enum Node {
         // phandle: u32,
         // addr_cells: i32,
         // size_cells: i32,
+
+        /// The labels that refer to this node.
         labels: Vec<String>,
 
+        /// The offset in bytes that this `Node` was found at within the buffer
+        /// that the containing tree was parsed from.
         offset: usize,
     },
 }
@@ -79,6 +141,13 @@ impl Labeled for Node {
 
                 Ok(())
             }
+        }
+    }
+
+    fn get_labels(&self) -> &[String] {
+        match *self {
+            Node::Deleted { .. } => &[],
+            Node::Existing { ref labels, .. } => labels,
         }
     }
 }
@@ -118,9 +187,13 @@ impl fmt::Display for Node {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+/// A name of a node, either as a reference or a full path.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum NodeName {
+    /// A reference to a previously defined label of a node.
     Ref(String),
+    /// The true name of a node. If appended to the parent node's path, this
+    /// node's path will be created.
     Full(String),
 }
 
@@ -134,6 +207,10 @@ impl fmt::Display for NodeName {
 }
 
 impl NodeName {
+    /// Extracts the name as a string slice.
+    ///
+    /// This does no conversion so the slice could be a reference or a full
+    /// name.
     pub fn as_str(&self) -> &str {
         match *self {
             NodeName::Ref(ref name) |
@@ -142,13 +219,38 @@ impl NodeName {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+/// A property of a node.
+///
+/// The property tracks it's own offset in the buffer that it was parsed from.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Property {
-    Deleted { name: String, offset: usize },
-    Existing {
+    /// A deleted node, made from a `/delete-property/` statement.
+    Deleted {
+        /// The full name of the property.
         name: String,
+        /// The offset in bytes that this `Property` was found at within the
+        /// buffer that the containing tree was parsed from.
+        offset: usize
+    },
+    /// A normal property. Unlike `Node`s, a `Property`'s name will never be a
+    /// reference. If `val` is `None` then the property was in the form
+    /// ```ignore
+    /// prop;
+    /// ```
+    /// other wise the property was in the form
+    /// ```ignore
+    /// prop = data;
+    /// ```
+    Existing {
+        /// The full name of the property.
+        name: String,
+        /// The values assigned to the property. `None` if the property is in a
+        /// marker form with no values.
         val: Option<Vec<Data>>,
+        /// The labels that refer to this property.
         labels: Vec<String>,
+        /// The offset in bytes that this `Property` was found at within the
+        /// buffer that the containing tree was parsed from.
         offset: usize,
     },
 }
@@ -175,6 +277,13 @@ impl Labeled for Property {
                 }
                 Ok(())
             }
+        }
+    }
+
+    fn get_labels(&self) -> &[String] {
+        match *self {
+            Property::Deleted { .. } => &[],
+            Property::Existing { ref labels, .. } => labels,
         }
     }
 }
@@ -212,11 +321,19 @@ impl fmt::Display for Property {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+/// Data that properties might contain.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Data {
+    /// A reference to a labeled object. Could be a node, a property, or data.
+    /// May contain the phandle number of the referenced object.
     Reference(String, Option<u64>),
+    /// An ASCII string. See `parser::escape_c_string` to see the few
+    /// limitations placed on the string.
     String(String),
+    /// A list of cells. The preceding `usize` to the `Vec` of cells is the number of bits used to
+    /// represent each cell. If not set with a preceding `/bits/` statement, it defaults to 32 bits.
     Cells(usize, Vec<Cell>),
+    /// An array of bytes.
     ByteArray(Vec<u8>),
 }
 
@@ -257,9 +374,14 @@ impl fmt::Display for Data {
     }
 }
 
+/// A cell that can hold either a number or a reference to another object.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Cell {
+    /// A number represented in a certain number of bits. The number of bits is defined in the
+    /// `Data::Cells` holding this `Cell`.
     Num(u64),
+    /// A reference to a labeled object. Could be a node, a property, or data.
+    /// May contain the phandle number of the referenced object.
     Ref(String, Option<u64>),
 }
 

@@ -1,3 +1,11 @@
+//! This crate includes functionality to parse Device Tree Source files into a
+//! tree structure and then manipulate that tree structure.
+//!
+//! The main parsing function is `parser::parse_dt`. The structures that make
+//! up the returned tree are found in the `tree` module. Finally, functions to
+//! parse includes and manipulate the information gleaned from include
+//! statements can be found in the `include` module.
+
 #![deny(missing_debug_implementations, trivial_casts, trivial_numeric_casts)]
 #![warn(missing_docs)]
 
@@ -11,11 +19,15 @@ pub mod include;
 use std::borrow::Borrow;
 use std::iter::once;
 
+/// Various errors that can occur why parsing.
 // TODO: impl Display and Error - issue 1.1
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
+    /// Some value could not be found by parsing the input.
     NotFound,
+    /// No more input was available where more was expected for parsing.
     IncompleteInput,
+    /// Some `nom` error occurred. Helpful, I know. This is only temporary.
     NomError,
 }
 

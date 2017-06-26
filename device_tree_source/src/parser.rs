@@ -1,3 +1,9 @@
+//! This module's main focus is `parse_dt` which parses a DTS file and returns
+//! an unflattened device tree.
+//!
+//! In addition there are a couple of utility C-style escaped strings and
+//! characters parsing functions.
+
 #![allow(trivial_numeric_casts)]
 
 use std::str::{self, FromStr};
@@ -421,13 +427,14 @@ named!(transform<Vec<u8>>, escaped_transform!(take_until_either!("\\\""), '\\', 
     map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u8>) => { |c| vec![c] }
 )));
 
-/// Parse a slice of bytes as a `String`, replacing escape codes with the
-/// appropriate character. Characters may be described as a C-style escape code.
-/// All hexadecimal and octal escape codes work up to 0x7f or x177,
-/// respectively. This is due to the conversion to `char`s. See
-/// `parser::escape_c_char` if a conversion of a character beyond this change is
-/// needed.
-named!(pub escape_c_string<String>, map_res!(
+named_attr!(#[doc =
+"Parse a slice of bytes as a `String`, replacing escape codes with the
+appropriate character. Characters may be described as a C-style escape code.
+All hexadecimal and octal escape codes work up to 0x7f or x177,
+respectively. This is due to the conversion to `char`s. See
+`parser::escape_c_char` if a conversion of a character beyond this change is
+needed."
+], pub escape_c_string<String>, map_res!(
     alt!(
         call!(transform) |
         map!(verify!(take_until!("\""), |s: &[u8]| s.is_empty()), |_| vec![])
@@ -435,10 +442,11 @@ named!(pub escape_c_string<String>, map_res!(
     String::from_utf8)
 );
 
-/// Parse a slice of bytes as a ASCII character. The character may be described
-/// as a C-style escape code. All hexadecimal and octal escape codes work up to
-/// 0xff or x777, respectively, because they are not converted to `char`s.
-named!(pub escape_c_char<u8>, alt!(
+named_attr!(#[doc =
+"Parse a slice of bytes as a ASCII character. The character may be described
+as a C-style escape code. All hexadecimal and octal escape codes work up to
+0xff or x777, respectively, because they are not converted to `char`s."
+], pub escape_c_char<u8>, alt!(
     tag!("\\a")     => { |_| 0x07 } |
     tag!("\\b")     => { |_| 0x08 } |
     tag!("\\t")     => { |_| b'\t' } |
