@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 pub trait Labeled {
-    fn add_label(&mut self, label: &str);
+    fn add_label(&mut self, label: &str) -> Result<(), ()>;
 }
 
 pub trait Offset {
@@ -25,11 +25,13 @@ pub struct ReserveInfo {
 }
 
 impl Labeled for ReserveInfo {
-    fn add_label(&mut self, label: &str) {
+    fn add_label(&mut self, label: &str) -> Result<(), ()> {
         let label = label.to_owned();
         if !self.labels.contains(&label) {
             self.labels.push(label);
         }
+
+        Ok(())
     }
 }
 
@@ -66,14 +68,16 @@ impl Node {
 }
 
 impl Labeled for Node {
-    fn add_label(&mut self, label: &str) {
+    fn add_label(&mut self, label: &str) -> Result<(), ()> {
         match *self {
-            Node::Deleted { .. } => panic!("Why are you adding a label to a deleted node?!"),
+            Node::Deleted { .. } => Err(()),
             Node::Existing { ref mut labels, .. } => {
                 let label = label.to_owned();
                 if labels.contains(&label) {
                     labels.push(label);
                 }
+
+                Ok(())
             }
         }
     }
@@ -161,16 +165,15 @@ impl Property {
 }
 
 impl Labeled for Property {
-    fn add_label(&mut self, label: &str) {
+    fn add_label(&mut self, label: &str) -> Result<(), ()> {
         match *self {
-            Property::Deleted { .. } => {
-                panic!("Why are you adding a label to a deleted property?!")
-            }
+            Property::Deleted { .. } => Err(()),
             Property::Existing { ref mut labels, .. } => {
                 let label = label.to_owned();
                 if labels.contains(&label) {
                     labels.push(label);
                 }
+                Ok(())
             }
         }
     }
