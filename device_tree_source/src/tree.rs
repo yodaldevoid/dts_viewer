@@ -187,7 +187,7 @@ impl fmt::Display for Property {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Data {
-    Reference(String),
+    Reference(String, Option<u64>),
     String(String),
     Cells(usize, Vec<Cell>),
     ByteArray(Vec<u8>),
@@ -197,7 +197,7 @@ impl fmt::Display for Data {
     // TODO: labels - issue 3 - issue 6
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Data::Reference(ref r) => write!(f, "&{}", r)?,
+            Data::Reference(ref r, _) => write!(f, "&{}", r)?,
             Data::String(ref s) => write!(f, "{}", s)?,
             Data::Cells(bits, ref cells) => {
                 if bits != 32 {

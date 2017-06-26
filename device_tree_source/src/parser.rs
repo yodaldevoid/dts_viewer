@@ -522,7 +522,7 @@ named!(parse_data<Data>, comments_ws!(alt!(
         ),
         char!(']')
     ) |
-    map!(parse_ref, |x| (Data::Reference(x)))
+    map!(parse_ref, |x| (Data::Reference(x, None)))
 )));
 
 named_args!(parse_prop(input_len: usize)<Property>, comments_ws!(alt!(
