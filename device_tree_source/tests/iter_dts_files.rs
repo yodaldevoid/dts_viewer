@@ -38,14 +38,14 @@ fn main() {
                                    ignore: true,
                                    should_panic: ShouldPanic::No,
                                },
-                               testfn: DynTestFn(Box::new(move || try_parse(p.clone()))),
+                               testfn: DynTestFn(Box::new(move || try_parse(&p.clone()))),
                            }
                        })
                        .collect();
     test_main(&args, tests);
 }
 
-fn try_parse(file: PathBuf) {
+fn try_parse(file: &PathBuf) {
     let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
     let mut include_dirs = Vec::new();
 

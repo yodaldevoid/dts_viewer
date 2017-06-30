@@ -119,7 +119,7 @@ pub enum Node {
 }
 
 impl Node {
-    /// Convenience function to get the NodeName no matter what form the
+    /// Convenience function to get the `NodeName` no matter what form the
     /// `Node`is in.
     pub fn name(&self) -> &NodeName {
         match *self {

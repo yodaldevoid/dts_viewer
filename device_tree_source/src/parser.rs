@@ -674,9 +674,9 @@ pub fn parse_dt(source: &[u8]) -> Result<ParseResult, ParseError> {
             }
         }
         IResult::Incomplete(_) => Err(ParseError::IncompleteInput),
-        IResult::Error(err) => {
+        IResult::Error(_err) => {
             // TODO: specific error messages - issue 4
-            // println!("{:?}", err);
+            // println!("{:?}", _err);
             Err(ParseError::NomError)
         }
     }

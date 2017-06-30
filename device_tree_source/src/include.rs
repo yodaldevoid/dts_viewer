@@ -247,9 +247,9 @@ impl IncludeBounds {
 ///
 /// # Errors
 /// Returns `NotWithinBounds` if the `IncludeBounds` containing the offset cannot be found.
-pub fn get_bounds_containing_offset<'a>(bounds: &'a [IncludeBounds],
+pub fn get_bounds_containing_offset(bounds: &[IncludeBounds],
                                         offset: usize)
-                                        -> Result<&'a IncludeBounds, BoundsError> {
+                                        -> Result<&IncludeBounds, BoundsError> {
     match bounds.binary_search_by(|b| {
         use std::cmp::Ordering::*;
         match (b.start().cmp(&offset), b.end().cmp(&offset)) {
@@ -382,7 +382,7 @@ named!(parse_include<String>, complete!(preceded!(
         ))
 )));
 
-fn find_include<'a>(buf: &'a [u8]) -> Option<(&'a [u8], PathBuf, &'a [u8])> {
+fn find_include(buf: &[u8]) -> Option<(&[u8], PathBuf, &[u8])> {
     for (index, win) in buf.windows("/include/".len()).enumerate() {
         if win == b"/include/" {
             match parse_include(&buf[index..]) {
@@ -395,7 +395,7 @@ fn find_include<'a>(buf: &'a [u8]) -> Option<(&'a [u8], PathBuf, &'a [u8])> {
         }
     }
 
-    return None
+    None
 }
 
 /// Parses `/include/` statements in the file returning a buffer with all files
@@ -518,10 +518,12 @@ pub fn include_files<P: AsRef<Path>, I: AsRef<Path>>(file: P, include_dirs: &[I]
 
             let inc_start = sub_bounds.first()
                                       .map(|b| b.global_start)
-                                      .ok_or(IncludeError::NoBoundReturned(included_path.clone()))?;
+                                      .ok_or_else(||
+                                          IncludeError::NoBoundReturned(included_path.clone()))?;
             let inc_end = sub_bounds.last()
                                     .map(|b| b.end())
-                                    .ok_or(IncludeError::NoBoundReturned(included_path.clone()))?;
+                                    .ok_or_else(||
+                                          IncludeError::NoBoundReturned(included_path.clone()))?;
             let eaten_len = (buf.len() - offset) - rem.len();
 
             // println!("{:#?}", sub_bounds);
