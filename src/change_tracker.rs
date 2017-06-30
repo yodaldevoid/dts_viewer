@@ -114,10 +114,11 @@ impl<'a> LabelStore<'a> {
 
                 self.insert_labels(&node_path, labels);
 
-                for prop in proplist {
+                for (name, prop) in proplist {
+                    let label_path = node_path.join(name);
+
                     match *prop {
-                        Property::Deleted { ref name, .. } => {
-                            let label_path = node_path.join(name);
+                        Property::Deleted { .. } => {
                             self.delete_labels(&label_path);
 
                             self.paths
@@ -125,8 +126,7 @@ impl<'a> LabelStore<'a> {
                                 .or_insert_with(Vec::new)
                                 .push(Element::Prop(prop));
                         }
-                        Property::Existing { ref name, ref labels, .. } => {
-                            let label_path = node_path.join(name);
+                        Property::Existing { ref labels, .. } => {
                             self.insert_labels(&label_path, labels);
 
                             self.paths
@@ -137,7 +137,7 @@ impl<'a> LabelStore<'a> {
                     }
                 }
 
-                for node in children {
+                for (_, node) in children {
                     self.fill_internal(&node_path, node);
                 }
 
