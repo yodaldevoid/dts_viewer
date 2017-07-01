@@ -138,7 +138,7 @@ impl<'a> LabelStore<'a> {
                     }
                 }
 
-                for (_, node) in children {
+                for node in children.values() {
                     self.fill_internal(&node_path, node);
                 }
 

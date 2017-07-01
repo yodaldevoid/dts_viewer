@@ -43,6 +43,204 @@ pub struct DTInfo {
     pub root: Node,
 }
 
+impl DTInfo {
+    /// Create a new `DTInfo` where the tree is a merging of the original
+    /// `DTInfo`'s tree and the list of `Node`s. The original tree is left
+    /// unmodified.
+    ///
+    /// The 'Nodes' will be applied to the tree by fist finding the 'Node' they
+    /// reference, either by path or label, and then merging the existing 'Node'
+    /// and the 'Node' from the list. This merge is done via 'Node::merge`.
+    pub fn apply_amends(&self, amends: &[Node]) -> Self {
+        let mut new_tree: DTInfo = self.clone();
+        new_tree.merge_amends(amends);
+        new_tree
+    }
+
+    /// Merge a list of 'Nodes' into the `DTInfo`'s tree, modifying it.
+    ///
+    /// The 'Nodes' will be applied to the tree by fist finding the 'Node' they
+    /// reference, either by path or label, and then merging the existing 'Node'
+    /// and the 'Node' from the list. This merge is done via 'Node::merge`.
+    pub fn merge_amends(&mut self, amends: &[Node]) {
+        for a in amends {
+            match a.name() {
+                &NodeName::Ref(ref refr) => {
+                    // could be either label ref or path ref
+                    if refr.starts_with('/') {
+                        // path ref
+                        self.get_node_by_path_mut(refr).unwrap().merge(a)
+                    } else {
+                        // label ref, time to get searching
+                        self.find_node_by_label_mut(refr).unwrap().merge(a)
+                    };
+                }
+                &NodeName::Full(_) => {
+                    // has to be modifying from root node
+                    // TODO: double check
+                    self.root.merge(a)
+                }
+            }
+        }
+
+        // TODO: recalculate boot CPU ID
+    }
+
+    /// Get a reference to a `Node` in the tree by it's path.
+    ///
+    /// # Errors
+    /// Returns an error if no node exists at the specified path exists or if
+    /// string passed is not a valid path.
+    pub fn get_node_by_path<'a>(&'a self, path: &str) -> Result<&'a Node, ()> {
+        fn internal<'a>(node: &'a Node, path: &str) -> Result<&'a Node, ()> {
+            if path.is_empty() {
+                return Err(())
+            }
+
+            let (name, rem) = path.find('/')
+                                  .and_then(|pos| Some(path.split_at(pos)))
+                                  .and_then(|(a,b)| Some((a, Some(b))))
+                                  .unwrap_or((path, None));
+
+            let subnode = match *node {
+                Node::Deleted{..} => return Err(()),
+                Node::Existing{ref children, ..} => children.get(name)
+            };
+
+            match subnode {
+                None => Err(()),
+                Some(subnode) =>
+                    match rem {
+                        None => Ok(subnode),
+                        Some(path) => internal(subnode, path),
+                    },
+            }
+        }
+
+        if !path.starts_with('/') {
+            Err(())
+        } else if path == "/" {
+            Ok(&self.root)
+        } else {
+            internal(&self.root, &path[1..])
+        }
+    }
+
+    /// Get a mutable reference to a `Node` in the tree by it's path.
+    ///
+    /// # Errors
+    /// Returns an error if no node exists at the specified path exists or if
+    /// string passed is not a valid path.
+    pub fn get_node_by_path_mut<'a>(&'a mut self, path: &str) -> Result<&'a mut Node, ()> {
+        fn internal<'a>(node: &'a mut Node, path: &str) -> Result<&'a mut Node, ()> {
+            if path.is_empty() {
+                return Err(())
+            }
+
+            let (name, rem) = path.find('/')
+                                  .and_then(|pos| Some(path.split_at(pos)))
+                                  .and_then(|(a,b)| Some((a, Some(b))))
+                                  .unwrap_or((path, None));
+
+            let subnode = match *node {
+                Node::Deleted{..} => return Err(()),
+                Node::Existing{ref mut children, ..} => children.get_mut(name)
+            };
+
+            match subnode {
+                None => Err(()),
+                Some(subnode) =>
+                    match rem {
+                        None => Ok(subnode),
+                        Some(path) => internal(subnode, path),
+                    },
+            }
+        }
+
+        if !path.starts_with('/') {
+            Err(())
+        } else if path == "/" {
+            Ok(&mut self.root)
+        } else {
+            internal(&mut self.root, &path[1..])
+        }
+    }
+
+    /// Get a reference to a Node pointed to by a label.
+    ///
+    /// This does a naive depth first search at the moment and has no cache
+    /// between runs. This should be fine for a few random accesses, but doing
+    /// some sort of manual caching is suggested if searching my labels is
+    /// needed often.
+    ///
+    /// # Errors
+    /// Returns an error if the label is empty or if no 'Node' with the label is
+    /// found.
+    pub fn find_node_by_label<'a>(&'a self, label: &str) -> Result<&'a Node, ()> {
+        fn internal<'a>(node: &'a Node, label: &str) -> Result<&'a Node, ()> {
+            match *node {
+                Node::Deleted { .. } => Err(()),
+                Node::Existing { ref labels, ref children, .. } => {
+                    if labels.iter().map(|s| s.as_str()).any(|l| l == label) {
+                        Ok(node)
+                    } else {
+                        for child in children.values() {
+                            if let Ok(node) = internal(child, label) {
+                                return Ok(node)
+                            }
+                        }
+
+                        Err(())
+                    }
+                }
+            }
+        }
+
+        if label.is_empty() {
+            Err(())
+        } else {
+            internal(&self.root, label)
+        }
+    }
+
+    /// Get a mutable reference to a Node pointed to by a label.
+    ///
+    /// This does a naive depth first search at the moment and has no cache
+    /// between runs. This should be fine for a few random accesses, but doing
+    /// some sort of manual caching is suggested if searching my labels is
+    /// needed often.
+    ///
+    /// # Errors
+    /// Returns an error if the label is empty or if no 'Node' with the label is
+    /// found.
+    pub fn find_node_by_label_mut<'a>(&'a mut self, label: &str) -> Result<&'a mut Node, ()> {
+        fn internal<'a>(node: &'a mut Node, label: &str) -> Result<&'a mut Node, ()> {
+            if node.get_labels().iter().map(|s| s.as_str()).any(|l| l == label) {
+                return Ok(node)
+            }
+
+            match *node {
+                Node::Deleted { .. } => Err(()),
+                Node::Existing { ref mut children, .. } => {
+                    for child in children.values_mut() {
+                        if let Ok(node) = internal(child, label) {
+                            return Ok(node)
+                        }
+                    }
+
+                    Err(())
+                }
+            }
+        }
+
+        if label.is_empty() {
+            Err(())
+        } else {
+            internal(&mut self.root, label)
+        }
+    }
+}
+
 /// Stores the information from a `/memreserve/` statement.
 #[derive(Debug, Clone)]
 pub struct ReserveInfo {
@@ -125,6 +323,44 @@ impl Node {
         match *self {
             Node::Deleted { ref name, .. } |
             Node::Existing { ref name, .. } => name,
+        }
+    }
+
+    /// Merge one `Node` into another. If a property exists in both `Node`s the
+    /// value in the `other` `Node` will be kept. This merge is also applied to
+    /// all child nodes, recursively.
+    fn merge(&mut self, other: &Node) {
+        match (self, other) {
+            (&mut Node::Existing { proplist: ref mut s_props,
+                                   children: ref mut s_childs,
+                                   labels: ref mut s_labels,
+                                   .. },
+             &Node::Existing { proplist: ref o_props,
+                               children: ref o_childs,
+                               labels: ref o_labels,
+                               .. }) => {
+                // merge props
+                s_props.extend(o_props.iter().map(|(k, v)| (k.to_owned(), v.to_owned())));
+                // merge nodes
+                for (name, node) in o_childs {
+                    match node {
+                        &Node::Deleted { .. } => { s_childs.remove(name).expect(&format!("Deleted non-existent node {}", name)); } // FIXME: should there always be a deletable node when deleting?
+                        &Node::Existing { .. } => {
+                            let entry = s_childs.entry(name.to_owned());
+                            if let Entry::Occupied(mut e) = entry {
+                                e.get_mut().merge(node);
+                            } else {
+                                entry.or_insert_with(|| node.clone());
+                            }
+                        }
+                    }
+                }
+                // merge labels
+                s_labels.extend(o_labels.iter().map(|s| s.to_owned()));
+                s_labels.sort();
+                s_labels.dedup();
+            }
+            _ => unreachable!()
         }
     }
 }
