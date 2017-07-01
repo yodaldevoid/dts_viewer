@@ -12,7 +12,7 @@ use std::num::ParseIntError;
 use nom::{IResult, ErrorKind, hex_digit, oct_digit, digit, is_alphanumeric, alpha, line_ending,
           not_line_ending, multispace, space, rest};
 
-use tree::{BootInfo, ReserveInfo, Node, NodeName, Property, Data, Cell};
+use tree::{DTInfo, ReserveInfo, Node, NodeName, Property, Data, Cell};
 use ::ParseError;
 
 // Copied and modified from rust-lang/rust/src/libcore/num/mod.rs
@@ -628,13 +628,13 @@ named_args!(parse_amend(input_len: usize)<Node>, comments_ws!(alt!(
 named_args!(parse_device_tree(input_len: usize)<Node>,
             comments_ws!(preceded!(peek!(char!('/')), call!(parse_node, input_len))));
 
-named_args!(parse_dts(input_len: usize)<(BootInfo, Vec<Node>)>, comments_ws!(do_parse!(
+named_args!(parse_dts(input_len: usize)<(DTInfo, Vec<Node>)>, comments_ws!(do_parse!(
     tag!("/dts-v1/;") >>
     mem_reserves: many0!(parse_mem_reserve) >>
     device_tree: call!(parse_device_tree, input_len) >>
     amendments: many0!(call!(parse_amend, input_len)) >>
     // TODO: set boot cpu id - issue 8
-    (BootInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, amendments)
+    (DTInfo { reserve_info: mem_reserves, root: device_tree, boot_cpuid: 0 }, amendments)
 )));
 
 /// Returned on a successful completion of `parse_dt`.
@@ -643,13 +643,13 @@ pub enum ParseResult<'a> {
     /// Indicates that the entirety of the buffer was used while parsing. Holds
     /// the boot info that includes the first root node and a `Vec` of all
     /// following nodes.
-    Complete(BootInfo, Vec<Node>),
-    /// Indicates that only of the buffer was used while parsing. Holds the boot
-    /// info that includes the first root node, a `Vec` of all following nodes,
-    /// and a slice containing the remainder of the buffer. Having left over
-    /// output after parsing is generally not expected and in most cases should
-    /// be considered an error.
-    RemainingInput(BootInfo, Vec<Node>, &'a [u8])
+    Complete(DTInfo, Vec<Node>),
+    /// Indicates that only of the buffer was used while parsing. Holds the
+    /// device tree info that includes the first root node, a `Vec` of all
+    /// following nodes, and a slice containing the remainder of the buffer.
+    /// Having left over output after parsing is generally not expected and in
+    /// most cases should be considered an error.
+    RemainingInput(DTInfo, Vec<Node>, &'a [u8])
 }
 
 /// Parses the slice of `u8`s as ASCII characters and returns a device tree made

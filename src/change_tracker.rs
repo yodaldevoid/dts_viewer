@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fmt;
 
-use device_tree_source::tree::{BootInfo, Node, NodeName, Property, Offset};
+use device_tree_source::tree::{DTInfo, Node, NodeName, Property, Offset};
 
 #[derive(Debug)]
 pub enum Element<'a> {
@@ -44,8 +44,9 @@ impl<'a> LabelStore<'a> {
 
     // TODO: somehow keep track of deleted labels so they can be searched for later
     //       while not being used for path lookup during change parsing
-    pub fn fill(&mut self, boot_info: &'a BootInfo, amends: &'a [Node]) {
-        self.fill_internal(Path::new("/"), &boot_info.root);
+    // TODO: path refs
+    pub fn fill(&mut self, dt_info: &'a DTInfo, amends: &'a [Node]) {
+        self.fill_internal(Path::new("/"), &dt_info.root);
         for node in amends {
             match *node {
                 Node::Existing { ref name, .. } => {

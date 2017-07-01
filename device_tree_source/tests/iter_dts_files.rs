@@ -111,8 +111,8 @@ fn try_parse(file: &PathBuf) {
 
     match parse_dt(&buffer) {
         Ok(ParseResult::Complete(..)) => {},
-        Ok(ParseResult::RemainingInput(boot_info, amends, rem)) => {
-            // println!("Boot Info:\n{:#?}", boot_info);
+        Ok(ParseResult::RemainingInput(dt_info, amends, rem)) => {
+            // println!("DT Info:\n{:#?}", dt_info);
             // println!("Amends:\n{:#?}", amends);
             panic!("Input remaining after parsing:\n{}", String::from_utf8_lossy(rem));
         }

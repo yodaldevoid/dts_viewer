@@ -27,13 +27,13 @@ pub trait Offset {
     fn get_offset(&self) -> usize;
 }
 
-/// The boot info as specified by the Device Tree Specification. Includes the
-/// reserved memory info, the boot CPU ID, and the root node of the tree. The
-/// root node may not include any changes made by node specifications listed
+/// The device tree info as specified by the Device Tree Specification. Includes
+/// the reserved memory info, the boot CPU ID, and the root node of the tree.
+/// The root node may not include any changes made by node specifications listed
 /// after the root node. These amendments are returned separately. See
 /// `parser::parse_dt`.
 #[derive(Debug, Clone)]
-pub struct BootInfo {
+pub struct DTInfo {
     /// The reserved memory information.
     pub reserve_info: Vec<ReserveInfo>,
     /// The boot CPU ID as specified by the device tree. Defaults to the first

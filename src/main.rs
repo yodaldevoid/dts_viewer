@@ -134,11 +134,11 @@ fn main() {
         println!("-- Could not constuct include tree from bounds!");
     }
 
-    let (boot_info, amends) = match parse_dt(&buffer) {
-        Ok(ParseResult::Complete(boot_info, amends)) => (boot_info, amends),
-        Ok(ParseResult::RemainingInput(boot_info, amends, rem)) => {
+    let (dt_info, amends) = match parse_dt(&buffer) {
+        Ok(ParseResult::Complete(dt_info, amends)) => (dt_info, amends),
+        Ok(ParseResult::RemainingInput(dt_info, amends, rem)) => {
             println!("Input remaining after parsing:\n\"{}\"", String::from_utf8_lossy(rem));
-            (boot_info, amends)
+            (dt_info, amends)
         }
         Err(err) => {
             println!("{:?}", err);
@@ -149,7 +149,7 @@ fn main() {
     // TODO: perform secondary checks and jazz (only smooth) - issue 9
 
     let mut store = LabelStore::new();
-    store.fill(&boot_info, &amends);
+    store.fill(&dt_info, &amends);
 
     loop {
         print!("Enter alias or path: ");
