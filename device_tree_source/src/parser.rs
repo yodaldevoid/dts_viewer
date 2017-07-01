@@ -359,21 +359,26 @@ fn parse_c_expr(input: &[u8]) -> IResult<&[u8], u64> {
     }
 }
 
-named!(integer<u64>, alt_complete!(
-    // TODO: - issue 5
-    /*
-    comments_ws!(do_parse!( // trinary
-        a: flat_map!(take_until_and_consume!("?"), integer) >>
-        b: flat_map!(take_until_and_consume!(":"), integer) >>
-        c: integer >>
-        (if a != 0 { b } else { c })
-    )) |
-    */
-    complete!(preceded!(tag_no_case!("0x"),
-        map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) |
-    preceded!(tag_no_case!("0"),
-        map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
-    map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
+// TODO: - issue 5
+/*
+comments_ws!(do_parse!( // trinary
+    a: flat_map!(take_until_and_consume!("?"), integer) >>
+    b: flat_map!(take_until_and_consume!(":"), integer) >>
+    c: integer >>
+    (if a != 0 { b } else { c })
+)) |
+*/
+
+// ([0-9]+|0[xX][0-9a-fA-F]+)(U|L|UL|LL|ULL)
+named!(integer<u64>, terminated!(
+    alt_complete!(
+        complete!(preceded!(tag_no_case!("0x"),
+            map_res!(map_res!(hex_digit, str::from_utf8), from_str_hex::<u64>))) |
+        preceded!(tag_no_case!("0"),
+            map_res!(map_res!(oct_digit, str::from_utf8), from_str_oct::<u64>)) |
+        map_res!(map_res!(digit, str::from_utf8), from_str_dec::<u64>)
+    ),
+    opt!(alt!(tag!("ULL") | tag!("LL") | tag!("UL") | tag!("L") | tag!("U")))
 ));
 
 fn is_prop_node_char(c: u8) -> bool {
@@ -966,6 +971,14 @@ mod tests {
         assert_eq!(
             parse_c_expr(b"((((0x910)) & 0xffff) - (0x800))"),
             IResult::Done(&b""[..], 272)
+        );
+    }
+
+    #[test]
+    fn integer_6() {
+        assert_eq!(
+            parse_c_expr(b"(-1UL)"),
+            IResult::Done(&b""[..], u64::max_value())
         );
     }
 
