@@ -1,6 +1,6 @@
 [package]
 name = "dts_viewer"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Gabriel Smith <ga29smith@gmail.com>"]
 description = "A program to allow easier viewing of device tree files."
 readme = "README.md"
@@ -11,6 +11,6 @@ repository = "https://github.com/yodaldevoid/dts_viewer"
 [workspace]
 
 [dependencies]
-device_tree_source = { path = "device_tree_source", version = "^0.1" }
+device_tree_source = { path = "device_tree_source", version = "^0.2" }
 clap = "^2"
 mktemp = "^0.3"
