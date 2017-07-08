@@ -20,10 +20,22 @@ use device_tree_source::include::{IncludeError, include_files};
 fn main() {
     let args: Vec<_> = args().collect();
 
-    let new_dir = PathBuf::from(::std::env::var("CARGO_MANIFEST_DIR").unwrap()) 
-                         .join("tests/dts"); 
-    ::std::env::set_current_dir(&new_dir) 
-        .expect("Could not change current directory. Does tests/dts exist?");
+    let new_dir = ::std::env::var("DTS_DIR")
+                            .map(|env| PathBuf::from(env))
+                            .or_else(|_| ::std::env::var("CARGO_MANIFEST_DIR")
+                                                  .map(|env| PathBuf::from(env).join("tests/dts")));
+    match new_dir {
+        Ok(new_dir) => {
+            if let Err(_) = ::std::env::set_current_dir(&new_dir) {
+                println!("\nCould not change current directory. Does tests/dts exist?\n");
+                return
+            }
+        }
+        Err(_) => {
+            println!("Both DTS_DIR and CARGO_MANIFEST_DIR unset!");
+            return
+        }
+    }
 
     let tests = WalkDir::new(".")
                        .follow_links(true)
