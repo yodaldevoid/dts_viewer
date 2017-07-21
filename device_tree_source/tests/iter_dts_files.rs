@@ -1,63 +1,39 @@
 #![allow(unused_variables)]
 
 extern crate device_tree_source;
-extern crate walkdir;
 extern crate mktemp;
-extern crate test;
 
-use std::env::args;
 use std::process::Command;
 use std::path::{PathBuf, Path};
 
-use walkdir::WalkDir;
 use mktemp::Temp;
-
-use test::{test_main, TestDesc, TestDescAndFn, DynTestName, DynTestFn, ShouldPanic};
 
 use device_tree_source::parser::{ParseResult, parse_dt};
 use device_tree_source::include::{IncludeError, include_files};
 
-fn main() {
-    let args: Vec<_> = args().collect();
-
-    let new_dir = ::std::env::var("DTS_DIR")
-                            .map(|env| PathBuf::from(env))
-                            .or_else(|_| ::std::env::var("CARGO_MANIFEST_DIR")
-                                                  .map(|env| PathBuf::from(env).join("tests/dts")));
-    match new_dir {
-        Ok(new_dir) => {
-            if let Err(_) = ::std::env::set_current_dir(&new_dir) {
-                println!("\nCould not change current directory. Does tests/dts exist?\n");
-                return
+macro_rules! generate_tests {
+    ($($name:ident $root:expr, $file:expr,)*) => {
+        $(
+            #[test]
+            #[ignore]
+            fn $name () {
+                $crate::try_parse($root, $file)
             }
-        }
-        Err(_) => {
-            println!("Both DTS_DIR and CARGO_MANIFEST_DIR unset!");
-            return
-        }
+        )*
     }
-
-    let tests = WalkDir::new(".")
-                       .follow_links(true)
-                       .into_iter()
-                       .filter_map(|e| e.ok())
-                       .filter(|e| e.file_name().to_string_lossy().ends_with(".dts"))
-                       .map(|d| d.path().to_owned())
-                       .map(|p| {
-                           TestDescAndFn {
-                               desc: TestDesc {
-                                   name: DynTestName(format!("{}", p.display())),
-                                   ignore: true,
-                                   should_panic: ShouldPanic::No,
-                               },
-                               testfn: DynTestFn(Box::new(move || try_parse(&p.clone()))),
-                           }
-                       })
-                       .collect();
-    test_main(&args, tests);
 }
 
-fn try_parse(file: &PathBuf) {
+include!("dts_file_names");
+
+#[allow(dead_code)]
+fn try_parse<P: AsRef<Path>>(root_dir: P, file: P) {
+    let root_dir = root_dir.as_ref();
+    let file = file.as_ref();
+    println!("{}", file.display());
+
+    ::std::env::set_current_dir(&root_dir)
+              .expect("\nCould not change current directory. Does dts folder exist?\n");
+
     let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
     let mut include_dirs = Vec::new();
 
