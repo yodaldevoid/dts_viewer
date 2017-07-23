@@ -72,7 +72,7 @@ impl DTInfo {
                         self.get_node_by_path_mut(refr).unwrap().merge(a)
                     } else {
                         // label ref, time to get searching
-                        self.find_node_by_label_mut(refr).unwrap().merge(a)
+                        self.get_node_by_label_mut(refr).unwrap().merge(a)
                     };
                 }
                 &NodeName::Full(_) => {
@@ -176,7 +176,7 @@ impl DTInfo {
     /// # Errors
     /// Returns an error if the label is empty or if no 'Node' with the label is
     /// found.
-    pub fn find_node_by_label<'a>(&'a self, label: &str) -> Result<&'a Node, ()> {
+    pub fn get_node_by_label<'a>(&'a self, label: &str) -> Result<&'a Node, ()> {
         fn internal<'a>(node: &'a Node, label: &str) -> Result<&'a Node, ()> {
             match *node {
                 Node::Deleted { .. } => Err(()),
@@ -213,7 +213,7 @@ impl DTInfo {
     /// # Errors
     /// Returns an error if the label is empty or if no 'Node' with the label is
     /// found.
-    pub fn find_node_by_label_mut<'a>(&'a mut self, label: &str) -> Result<&'a mut Node, ()> {
+    pub fn get_node_by_label_mut<'a>(&'a mut self, label: &str) -> Result<&'a mut Node, ()> {
         fn internal<'a>(node: &'a mut Node, label: &str) -> Result<&'a mut Node, ()> {
             if node.get_labels().iter().map(|s| s.as_str()).any(|l| l == label) {
                 return Ok(node)
@@ -630,5 +630,76 @@ impl fmt::Display for Cell {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_by_path() {
+        let mut tree = DTInfo {
+            reserve_info: Vec::new(),
+            boot_cpuid: 0,
+            root: Node::Existing {
+                name: NodeName::Full("/".to_owned()),
+                proplist: HashMap::new(),
+                children: HashMap::new(),
+                labels: Vec::new(),
+                offset: 0,
+            }
+        };
+        let node = Node::Existing {
+            name: NodeName::Full("node1".to_owned()),
+            proplist: HashMap::new(),
+            children: HashMap::new(),
+            labels: vec!["meh".to_owned()],
+            offset: 0,
+        };
+        match tree.root {
+            Node::Existing { ref mut children, .. } => {
+               children.insert(node.name().as_str().to_owned(), node.clone());
+            }
+            _ => unreachable!(),
+        }
+        let path = "/node1";
+        assert_eq!(
+            tree.get_node_by_path(path),
+            Ok(&node)
+        );
+    }
+
+    #[test]
+    fn node_by_label() {
+        let mut tree = DTInfo {
+            reserve_info: Vec::new(),
+            boot_cpuid: 0,
+            root: Node::Existing {
+                name: NodeName::Full("/".to_owned()),
+                proplist: HashMap::new(),
+                children: HashMap::new(),
+                labels: Vec::new(),
+                offset: 0,
+            }
+        };
+        let node = Node::Existing {
+            name: NodeName::Full("node1".to_owned()),
+            proplist: HashMap::new(),
+            children: HashMap::new(),
+            labels: vec!["meh".to_owned()],
+            offset: 0,
+        };
+        match tree.root {
+            Node::Existing { ref mut children, .. } => {
+               children.insert(node.name().as_str().to_owned(), node.clone());
+            }
+            _ => unreachable!(),
+        }
+        let label = "meh";
+        assert_eq!(
+            tree.get_node_by_label(label),
+            Ok(&node)
+        );
     }
 }
