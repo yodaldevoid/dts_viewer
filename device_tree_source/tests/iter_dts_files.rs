@@ -4,7 +4,7 @@ extern crate device_tree_source;
 extern crate mktemp;
 
 use std::process::Command;
-use std::path::{PathBuf, Path};
+use std::path::Path;
 
 use mktemp::Temp;
 
@@ -31,9 +31,6 @@ fn try_parse<P: AsRef<Path>>(root_dir: P, file: P) {
     let file = file.as_ref();
     println!("{}", file.display());
 
-    ::std::env::set_current_dir(&root_dir)
-              .expect("\nCould not change current directory. Does dts folder exist?\n");
-
     let mut cpp_temp_out = Temp::new_file().expect("Could not create temp file");
     let mut include_dirs = Vec::new();
 
@@ -42,12 +39,13 @@ fn try_parse<P: AsRef<Path>>(root_dir: P, file: P) {
                .args(&["-undef", "-D__DTS__", "-x", "assembler-with-cpp"])
                .args(&["-o", cpp_temp_out.as_ref().to_str().unwrap()])
                .arg(file.to_str().unwrap())
-               .args(&["-I", "."]);
-    include_dirs.push(PathBuf::from("."));
+               .args(&["-I", &root_dir.to_string_lossy()]);
+    include_dirs.push(root_dir.to_owned());
 
     if Path::new("include").is_dir() {
-        cpp_command.args(&["-I", "include/"]);
-        include_dirs.push(PathBuf::from("include/"));
+        let d = root_dir.join("include/");
+        cpp_command.args(&["-I", &d.to_string_lossy()]);
+        include_dirs.push(d);
     }
 
     if let Some(parent) = file.parent() {
