@@ -3,3 +3,5 @@ target
 *.bk
 
 device_tree_source/tests/dts
+
+device_tree_source/tests/dts_file_names
